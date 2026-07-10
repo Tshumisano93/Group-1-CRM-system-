@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Thulamela Municipality CRM utilizes client-side simulated role-based authentication.
+    // For cloud synchronization to function without Firebase Auth, we allow read and write access for all collections.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
