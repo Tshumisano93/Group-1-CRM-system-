@@ -217,15 +217,17 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
         </div>
 
         {/* Action Button */}
-        {(currentUser.role === "super_admin" || currentUser.role === "municipal_admin") && (
-          <button
-            onClick={() => setShowUploadForm(!showUploadForm)}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-gov-green hover:bg-gov-green-hover text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-gov-green/10"
-          >
-            <Plus size={12} />
-            <span>Upload Document</span>
-          </button>
-        )}
+        <div className="flex space-x-2">
+          {(currentUser.role === "super_admin" || currentUser.role === "municipal_admin") && (
+            <button
+              onClick={() => setShowUploadForm(!showUploadForm)}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-gov-green hover:bg-gov-green-hover text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-gov-green/10"
+            >
+              <Plus size={12} />
+              <span>Upload Document</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 2. Upload Document Form */}
@@ -242,7 +244,7 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
               placeholder="e.g. Ward Waste Management Guideline"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
               required
             />
           </div>
@@ -252,7 +254,7 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
             <select
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value as MunicipalDocument["category"])}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none font-bold text-slate-700"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none font-bold text-slate-700 text-base"
             >
               <option value="policies">Municipal Policies & IDP</option>
               <option value="training">SOPs & Training Manuals</option>
@@ -270,7 +272,7 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
               placeholder="https://www.thulamela.gov.za/docs/file.pdf"
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none font-mono"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none font-mono text-base"
               required
             />
           </div>
@@ -307,7 +309,7 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
             placeholder="Search document names, authors, version logs..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold focus:outline-none"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold focus:outline-none text-base"
           />
           <Search className="absolute left-3 top-2.5 text-slate-400" size={13} />
         </div>
@@ -316,7 +318,7 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none font-bold text-slate-700"
+          className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none font-bold text-slate-700 text-base"
         >
           <option value="All">All Categories</option>
           <option value="policies">Policies & IDP</option>

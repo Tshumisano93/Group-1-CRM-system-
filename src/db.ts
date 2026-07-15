@@ -1,6 +1,7 @@
-import { User, Ward, Department, Technician, Complaint, Notification, Announcement, AuditLog, UserRole, ChatMessage, ChatRoom, CalendarEvent, Task, MunicipalDocument, DigitalForm } from "./types";
-import { SEED_WARDS, DEPARTMENTS, SEED_TECHNICIANS, SEED_USERS, SEED_COMPLAINTS, ANNOUNCEMENTS } from "./data";
+import { User, Ward, Department, Technician, Complaint, Notification, Announcement, AuditLog, UserRole, ChatMessage, ChatRoom, CalendarEvent, Task, MunicipalDocument, DigitalForm, AccountRequest, ServiceNotice } from "./types";
+import { SEED_WARDS, DEPARTMENTS, SEED_TECHNICIANS, SEED_USERS, SEED_COMPLAINTS, ANNOUNCEMENTS, SEED_SERVICE_NOTICES } from "./data";
 import { isFirebaseEnabled, db, auth } from "./firebase";
+import { signInAnonymously } from "firebase/auth";
 import { 
   collection, 
   doc, 
@@ -46,8 +47,23 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error("Firestore Error: ", JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+
+  const isPermissionError = 
+    errInfo.error.includes("permission") || 
+    errInfo.error.includes("Permission") || 
+    errInfo.error.includes("insufficient") ||
+    errInfo.error.includes("unauthenticated") ||
+    errInfo.error.includes("auth/");
+
+  if (isPermissionError) {
+    console.warn("Firestore Security Warning: ", JSON.stringify(errInfo));
+  } else {
+    console.error("Firestore Error: ", JSON.stringify(errInfo));
+  }
+
+  if (operationType !== OperationType.LIST) {
+    throw new Error(JSON.stringify(errInfo));
+  }
 }
 
 let syncStatus: "synced" | "syncing" | "offline" = "offline";
@@ -169,20 +185,33 @@ export function initializeDb() {
     localStorage.setItem("thulamela_crm_digital_forms", JSON.stringify(initialForms));
   }
 
+  if (!localStorage.getItem("thulamela_crm_service_notices") || localStorage.getItem("thulamela_crm_service_notices") === "[]") {
+    localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(SEED_SERVICE_NOTICES));
+  }
+
   // 2. If Firebase is enabled, kick off Firestore background sync & real-time listeners
-  if (isFirebaseEnabled && db) {
+  if (isFirebaseEnabled && db && auth) {
     syncStatus = "syncing";
     triggerDbUpdateEvent();
     
-    setupFirestoreListenersAndSync().then(() => {
-      syncStatus = "synced";
-      triggerDbUpdateEvent();
-      console.log("Firestore sync & listeners successfully attached!");
-    }).catch(err => {
-      syncStatus = "offline";
-      triggerDbUpdateEvent();
-      console.error("Error setting up Firestore sync:", err);
-    });
+    const startSync = async () => {
+      try {
+        if (!auth.currentUser) {
+          console.log("Signing in anonymously to Firebase Auth...");
+          await signInAnonymously(auth);
+        }
+        await setupFirestoreListenersAndSync();
+        syncStatus = "synced";
+        triggerDbUpdateEvent();
+        console.log("Firestore sync & listeners successfully attached!");
+      } catch (err) {
+        syncStatus = "offline";
+        triggerDbUpdateEvent();
+        console.warn("Firestore sync initialization paused (user may be offline or unauthenticated):", err);
+      }
+    };
+
+    startSync();
   } else {
     syncStatus = "offline";
     triggerDbUpdateEvent();
@@ -205,13 +234,8 @@ async function setupFirestoreListenersAndSync() {
       const snap = await getDocs(q);
       return snap.empty;
     } catch (error) {
-      // If it's a permission issue or other Firestore error, delegate to the handler
-      try {
-        handleFirestoreError(error, OperationType.GET, collectionName);
-      } catch (err) {
-        console.warn("IsCollectionEmpty suppressed error during initialization check:", err);
-      }
-      return true;
+      console.warn(`Could not check if collection ${collectionName} is empty (expected if restricted):`, error);
+      return false;
     }
   };
 
@@ -229,7 +253,7 @@ async function setupFirestoreListenersAndSync() {
       try {
         await batch.commit();
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, collectionName);
+        console.warn(`Seeding Firestore collection ${collectionName} skipped (expected if not Admin):`, error);
       }
     }
   };
@@ -243,6 +267,7 @@ async function setupFirestoreListenersAndSync() {
   await seedIfEmpty("announcements", getAnnouncements);
   await seedIfEmpty("notifications", getNotifications);
   await seedIfEmpty("auditLogs", getAuditLogs);
+  await seedIfEmpty("serviceNotices", getServiceNotices);
 
   // Setup Real-Time Listeners to update localstorage dynamically when data changes on cloud
   onSnapshot(collection(db, "users"), (snapshot) => {
@@ -299,6 +324,15 @@ async function setupFirestoreListenersAndSync() {
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "auditLogs");
   });
+
+  onSnapshot(collection(db, "serviceNotices"), (snapshot) => {
+    const list: ServiceNotice[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as ServiceNotice));
+    localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(list));
+    triggerDbUpdateEvent();
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, "serviceNotices");
+  });
 }
 
 // Low-level Getters & Setters
@@ -314,7 +348,7 @@ export function saveUsers(users: User[]) {
       try {
         await setDoc(doc(db, "users", u.id), u);
       } catch (err) {
-        console.error("Firestore sync users failed:", err);
+        console.warn("Firestore sync users skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -331,7 +365,7 @@ export function saveWards(wards: Ward[]) {
       try {
         await setDoc(doc(db, "wards", `ward-${w.wardNumber}`), w);
       } catch (err) {
-        console.error("Firestore sync wards failed:", err);
+        console.warn("Firestore sync wards skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -352,7 +386,7 @@ export function saveTechnicians(technicians: Technician[]) {
       try {
         await setDoc(doc(db, "technicians", t.id), t);
       } catch (err) {
-        console.error("Firestore sync technicians failed:", err);
+        console.warn("Firestore sync technicians skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -369,7 +403,7 @@ export function saveComplaints(complaints: Complaint[]) {
       try {
         await setDoc(doc(db, "complaints", c.id), c);
       } catch (err) {
-        console.error("Firestore sync complaints failed:", err);
+        console.warn("Firestore sync complaints skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -386,7 +420,7 @@ export function saveNotifications(notifications: Notification[]) {
       try {
         await setDoc(doc(db, "notifications", n.id), n);
       } catch (err) {
-        console.error("Firestore sync notifications failed:", err);
+        console.warn("Firestore sync notifications skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -403,7 +437,7 @@ export function saveAnnouncements(announcements: Announcement[]) {
       try {
         await setDoc(doc(db, "announcements", a.id), a);
       } catch (err) {
-        console.error("Firestore sync announcements failed:", err);
+        console.warn("Firestore sync announcements skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -420,7 +454,7 @@ export function saveAuditLogs(logs: AuditLog[]) {
       try {
         await setDoc(doc(db, "auditLogs", l.id), l);
       } catch (err) {
-        console.error("Firestore sync audit logs failed:", err);
+        console.warn("Firestore sync audit logs skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -510,7 +544,7 @@ export function saveChatRooms(rooms: ChatRoom[]) {
       try {
         await setDoc(doc(db, "chatRooms", r.id), r);
       } catch (err) {
-        console.error("Firestore sync chatRooms failed:", err);
+        console.warn("Firestore sync chatRooms skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -528,7 +562,7 @@ export function saveChatMessages(messages: ChatMessage[]) {
       try {
         await setDoc(doc(db, "chatMessages", m.id), m);
       } catch (err) {
-        console.error("Firestore sync chatMessages failed:", err);
+        console.warn("Firestore sync chatMessages skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -546,7 +580,7 @@ export function saveCalendarEvents(events: CalendarEvent[]) {
       try {
         await setDoc(doc(db, "calendarEvents", e.id), e);
       } catch (err) {
-        console.error("Firestore sync calendarEvents failed:", err);
+        console.warn("Firestore sync calendarEvents skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -564,7 +598,7 @@ export function saveTasks(tasks: Task[]) {
       try {
         await setDoc(doc(db, "tasks", t.id), t);
       } catch (err) {
-        console.error("Firestore sync tasks failed:", err);
+        console.warn("Firestore sync tasks skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
@@ -582,12 +616,13 @@ export function saveDocuments(documents: MunicipalDocument[]) {
       try {
         await setDoc(doc(db, "documents", d.id), d);
       } catch (err) {
-        console.error("Firestore sync documents failed:", err);
+        console.warn("Firestore sync documents skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
 }
 
+// Get and save Digital Forms
 // Get and save Digital Forms
 export function getDigitalForms(): DigitalForm[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_digital_forms") || "[]");
@@ -600,7 +635,24 @@ export function saveDigitalForms(forms: DigitalForm[]) {
       try {
         await setDoc(doc(db, "digitalForms", f.id), f);
       } catch (err) {
-        console.error("Firestore sync digitalForms failed:", err);
+        console.warn("Firestore sync digitalForms skipped/failed (expected if unauthorized or offline):", err);
+      }
+    });
+  }
+}
+
+export function getServiceNotices(): ServiceNotice[] {
+  return JSON.parse(localStorage.getItem("thulamela_crm_service_notices") || "[]");
+}
+
+export function saveServiceNotices(notices: ServiceNotice[]) {
+  localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(notices));
+  if (isFirebaseEnabled && db) {
+    notices.forEach(async (n) => {
+      try {
+        await setDoc(doc(db, "serviceNotices", n.id), n);
+      } catch (err) {
+        console.warn("Firestore sync serviceNotices skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }

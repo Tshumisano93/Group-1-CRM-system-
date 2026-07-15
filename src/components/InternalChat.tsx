@@ -357,7 +357,7 @@ export default function InternalChat({ currentUser, onAddToast }: InternalChatPr
               placeholder="Search chats or dispatch notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-gov-green focus:bg-white transition-all"
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold focus:outline-none focus:border-gov-green focus:bg-white transition-all text-base"
             />
             <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
           </div>
@@ -665,7 +665,7 @@ export default function InternalChat({ currentUser, onAddToast }: InternalChatPr
                   value={typedMessage}
                   onChange={(e) => setTypedMessage(e.target.value)}
                   placeholder="Type secure message (e.g. Ward update or technical status)..."
-                  className="flex-grow bg-slate-50 border border-slate-200 focus:outline-none focus:border-gov-green focus:bg-white p-2.5 rounded-xl text-xs font-semibold transition-all"
+                  className="flex-grow bg-slate-50 border border-slate-200 focus:outline-none focus:border-gov-green focus:bg-white p-2.5 rounded-xl font-semibold transition-all text-base"
                 />
                 <button
                   type="submit"

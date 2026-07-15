@@ -144,7 +144,7 @@ export default function InteractiveGIS({ currentUser, onAddToast }: InteractiveG
               placeholder="Search 41 Wards, communities..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-gov-green focus:bg-white transition-all"
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold focus:outline-none focus:border-gov-green focus:bg-white transition-all text-base"
             />
             <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
           </div>

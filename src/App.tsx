@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { initializeDb, getCurrentUser, setCurrentUser } from "./db";
 import { User } from "./types";
 
@@ -9,6 +11,8 @@ import PublicHome from "./components/PublicHome";
 import PublicAbout from "./components/PublicAbout";
 import PublicServices from "./components/PublicServices";
 import PublicContact from "./components/PublicContact";
+import PublicWards from "./components/PublicWards";
+import ServiceDashboard from "./components/ServiceDashboard";
 
 // Authentication Portals
 import CouncillorLogin from "./components/CouncillorLogin";
@@ -19,7 +23,6 @@ import CouncillorDashboard from "./components/CouncillorDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import TechnicianDashboard from "./components/TechnicianDashboard";
 
-// Toast Alert Object Interface
 interface Toast {
   id: string;
   title: string;
@@ -27,45 +30,56 @@ interface Toast {
   type: "success" | "info" | "warning" | "error";
 }
 
+const VIEW_TO_PATH: Record<string, string> = {
+  "home": "/",
+  "about": "/about",
+  "services": "/services",
+  "wards": "/wards",
+  "contact": "/contact",
+  "councillor-login": "/login",
+  "admin-login": "/admin",
+  "councillor-dashboard": "/councillor-dashboard",
+  "admin-dashboard": "/admin-dashboard",
+  "technician-dashboard": "/technician-dashboard",
+};
+
+const PATH_TO_VIEW: Record<string, string> = Object.fromEntries(
+  Object.entries(VIEW_TO_PATH).map(([view, path]) => [path, view])
+);
+
+function viewFromPath(pathname: string): string {
+  return PATH_TO_VIEW[pathname] ?? "home";
+}
+
+function ProtectedRoute({
+  currentUser,
+  children,
+}: {
+  currentUser: User | null;
+  children: React.ReactNode;
+}) {
+  if (!currentUser) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
-  const [currentView, setCurrentView] = useState<string>("home");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentView = viewFromPath(location.pathname);
+
+  const [currentUser, setCurrentUserState] = useState<User | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // Initialize DB and authenticate active sessions
   useEffect(() => {
     initializeDb();
-    const storedUser = getCurrentUser();
-    if (storedUser) {
-      setCurrentUser(storedUser);
-      if (storedUser.role === "councillor") {
-        setCurrentView("councillor-dashboard");
-      } else if (storedUser.role === "technician") {
-        setCurrentView("technician-dashboard");
-      } else {
-        setCurrentView("admin-dashboard");
-      }
+    const existingUser = getCurrentUser();
+    if (existingUser) {
+      setCurrentUserState(existingUser);
     }
-
-    // Hash-based URL router helper
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash === "#home" || hash === "") setCurrentView("home");
-      else if (hash === "#about") setCurrentView("about");
-      else if (hash === "#services") setCurrentView("services");
-      else if (hash === "#contact") setCurrentView("contact");
-      else if (hash === "#login") setCurrentView("councillor-login");
-      else if (hash === "#admin") setCurrentView("admin-login");
-    };
-
-    window.addEventListener("hashchange", handleHashChange);
-    // Initial check
-    handleHashChange();
-
-    return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
-  // Toast dispatch helper
   const addToast = (title: string, message: string, type: "success" | "info" | "warning" | "error") => {
     const newToast: Toast = {
       id: `toast-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -74,8 +88,6 @@ export default function App() {
       type
     };
     setToasts((prev) => [...prev, newToast]);
-
-    // Self-dismiss after 4.5 seconds
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
     }, 4500);
@@ -85,113 +97,42 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Logouts
   const handleLogout = () => {
     setCurrentUser(null);
-    setCurrentView("home");
-    window.location.hash = "#home";
+    setCurrentUserState(null);
+    navigate("/");
     addToast("Session Logged Out", "You have been securely logged out of the Thulamela CRM network.", "info");
   };
 
   const handleLoginSuccess = (user: User) => {
-    setCurrentUser(user);
+    setCurrentUserState(user);
     if (user.role === "councillor") {
-      setCurrentView("councillor-dashboard");
+      navigate("/councillor-dashboard");
     } else if (user.role === "technician") {
-      setCurrentView("technician-dashboard");
+      navigate("/technician-dashboard");
     } else {
-      setCurrentView("admin-dashboard");
+      navigate("/admin-dashboard");
     }
   };
 
-  // Navigation switch helper
   const handleNavigate = (view: string) => {
-    // Sync browser hash for seamless routing
-    if (view === "home") window.location.hash = "#home";
-    else if (view === "about") window.location.hash = "#about";
-    else if (view === "services") window.location.hash = "#services";
-    else if (view === "contact") window.location.hash = "#contact";
-    else if (view === "councillor-login") window.location.hash = "#login";
-    else if (view === "admin-login") window.location.hash = "#admin";
-    
-    setCurrentView(view);
-    // Scroll to top of preview viewport
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const path = VIEW_TO_PATH[view] ?? "/";
+    navigate(path);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Determine which viewport to render
-  const renderViewContent = () => {
-    switch (currentView) {
-      case "home":
-        return <PublicHome onNavigate={handleNavigate} />;
-      case "about":
-        return <PublicAbout />;
-      case "services":
-        return <PublicServices />;
-      case "contact":
-        return <PublicContact onAddToast={addToast} />;
-      case "councillor-login":
-        return (
-          <CouncillorLogin 
-            onLoginSuccess={handleLoginSuccess} 
-            onNavigate={handleNavigate}
-            onAddToast={addToast}
-          />
-        );
-      case "admin-login":
-        return (
-          <AdminLogin 
-            onLoginSuccess={handleLoginSuccess} 
-            onNavigate={handleNavigate}
-            onAddToast={addToast}
-          />
-        );
-      case "councillor-dashboard":
-        if (!currentUser) return <PublicHome onNavigate={handleNavigate} />;
-        return (
-          <CouncillorDashboard 
-            currentUser={currentUser} 
-            onLogout={handleLogout}
-            onNavigate={handleNavigate}
-            onAddToast={addToast}
-          />
-        );
-      case "technician-dashboard":
-        if (!currentUser) return <PublicHome onNavigate={handleNavigate} />;
-        return (
-          <TechnicianDashboard 
-            currentUser={currentUser} 
-            onLogout={handleLogout}
-            onNavigate={handleNavigate}
-            onAddToast={addToast}
-          />
-        );
-      case "admin-dashboard":
-        if (!currentUser) return <PublicHome onNavigate={handleNavigate} />;
-        return (
-          <AdminDashboard 
-            currentUser={currentUser} 
-            onLogout={handleLogout}
-            onNavigate={handleNavigate}
-            onAddToast={addToast}
-          />
-        );
-      default:
-        return <PublicHome onNavigate={handleNavigate} />;
-    }
-  };
-
-  // Determine if public navigation and public footers are required (e.g. not in dashboards)
-  const isDashboardView = currentView === "councillor-dashboard" || currentView === "admin-dashboard" || currentView === "technician-dashboard";
+  const isDashboardView =
+    currentView === "councillor-dashboard" ||
+    currentView === "admin-dashboard" ||
+    currentView === "technician-dashboard";
 
   return (
     <div id="thulamela-crm-application-root" className="min-h-screen flex flex-col font-sans text-slate-800 bg-slate-50">
-      
-      {/* Top Banner & public Navigation Bar */}
+
       {!isDashboardView && (
-        <PublicNavbar 
-          currentView={currentView} 
-          onNavigate={handleNavigate} 
+        <PublicNavbar
+          currentView={currentView}
+          onNavigate={handleNavigate}
           isLoggedIn={!!currentUser}
           userRole={currentUser?.role}
           userName={currentUser?.name}
@@ -199,22 +140,155 @@ export default function App() {
         />
       )}
 
-      {/* Main Viewport Container */}
       <div className="flex-grow">
-        {renderViewContent()}
-      </div>
+        <AnimatePresence mode="wait">
+          <Routes location={location}>
+            <Route
+              path="/"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicHome onNavigate={handleNavigate} onAddToast={addToast} />
+                </motion.div>
+              }
+            />
+            <Route
+              path="/about"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicAbout />
+                </motion.div>
+              }
+            />
+            <Route
+              path="/services"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicServices />
+                </motion.div>
+              }
+            />
+            <Route
+              path="/wards"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicWards />
+                </motion.div>
+              }
+            />
+            <Route
+              path="/contact"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicContact onAddToast={addToast} />
+                </motion.div>
+              }
+            />
 
-      {/* Public Footer */}
+          <Route
+            path="/login"
+            element={
+              <CouncillorLogin
+                onLoginSuccess={handleLoginSuccess}
+                onNavigate={handleNavigate}
+                onAddToast={addToast}
+              />
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <AdminLogin
+                onLoginSuccess={handleLoginSuccess}
+                onNavigate={handleNavigate}
+                onAddToast={addToast}
+              />
+            }
+          />
+
+          <Route
+            path="/councillor-dashboard"
+            element={
+              <ProtectedRoute currentUser={currentUser}>
+                <CouncillorDashboard
+                  currentUser={currentUser as User}
+                  onLogout={handleLogout}
+                  onNavigate={handleNavigate}
+                  onAddToast={addToast}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/technician-dashboard"
+            element={
+              <ProtectedRoute currentUser={currentUser}>
+                <TechnicianDashboard
+                  currentUser={currentUser as User}
+                  onLogout={handleLogout}
+                  onNavigate={handleNavigate}
+                  onAddToast={addToast}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin-dashboard"
+            element={
+              <ProtectedRoute currentUser={currentUser}>
+                <AdminDashboard
+                  currentUser={currentUser as User}
+                  onLogout={handleLogout}
+                  onNavigate={handleNavigate}
+                  onAddToast={addToast}
+                />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AnimatePresence>
+    </div>
+
       {!isDashboardView && (
         <PublicFooter onNavigate={handleNavigate} />
       )}
 
-      {/* Elegant Stacked Toast Alerts */}
       <div id="crm-toast-portal" className="fixed bottom-6 right-6 z-50 flex flex-col space-y-2.5 max-w-sm w-full">
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`p-4 rounded-xl shadow-2xl border text-xs leading-relaxed flex items-start justify-between space-x-3 transition-all transform duration-300 translate-y-0 animate-slideIn ${
+            className={`p-4 rounded-xl shadow-2xl border text-xs leading-relaxed flex items-start justify-between space-x-3 transition-all transform duration-300 translate-y-0 animate-slide-in ${
               toast.type === "success"
                 ? "bg-emerald-50 text-emerald-950 border-emerald-200"
                 : toast.type === "error"

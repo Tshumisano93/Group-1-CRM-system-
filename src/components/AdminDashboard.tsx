@@ -14,7 +14,9 @@ import {
   addNotification,
   getSyncStatus
 } from "../db";
-import { User, Complaint, Ward, Department, Technician, AuditLog, ComplaintStatus, ComplaintPriority } from "../types";
+import { User, Complaint, Ward, Department, Technician, AuditLog, ComplaintStatus, ComplaintPriority, AccountRequest } from "../types";
+import { collection, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
+import { db } from "../firebase";
 import { 
   LayoutDashboard, 
   Users, 
@@ -56,6 +58,8 @@ import InteractiveGIS from "./InteractiveGIS";
 import ExecutiveDashboardView from "./ExecutiveDashboardView";
 import DocumentManager from "./DocumentManager";
 import DigitalForms from "./DigitalForms";
+import WardManagement from "./WardManagement";
+import ServiceNoticeManagement from "./ServiceNoticeManagement";
 
 interface AdminDashboardProps {
   currentUser: User;
@@ -64,7 +68,7 @@ interface AdminDashboardProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
-type AdminTab = "dashboard" | "councillors" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms";
+type AdminTab = "dashboard" | "councillors" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices";
 
 export default function AdminDashboard({
   currentUser,
@@ -78,6 +82,7 @@ export default function AdminDashboard({
   const [users, setUsers] = useState<User[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [accountRequests, setAccountRequests] = useState<AccountRequest[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [editingWard, setEditingWard] = useState<Ward | null>(null);
 
@@ -145,6 +150,17 @@ export default function AdminDashboard({
       window.removeEventListener("thulamela_db_update", handleDbUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "account_requests") {
+      const fetchRequests = async () => {
+        const snapshot = await getDocs(collection(db, "accountRequests"));
+        const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as AccountRequest[];
+        setAccountRequests(requests);
+      };
+      fetchRequests();
+    }
+  }, [activeTab]);
 
   const fetchStrategicInsights = async () => {
     setIsInsightsLoading(true);
@@ -311,6 +327,59 @@ export default function AdminDashboard({
     setNewCllrConfirmPassword("");
     setNewCllrProfilePic("");
 
+    loadDashboardData();
+  };
+
+  const handleApproveRequest = (request: AccountRequest) => {
+    // Reuse create councillor logic, but using request data
+    const nextId = `COUN-${users.length + 101}`;
+    const selectedWardObj = wards.find(w => w.wardNumber === request.wardNumber);
+    const wardName = selectedWardObj ? selectedWardObj.wardName : `Ward ${request.wardNumber}`;
+
+    // Generate temporary password
+    const tempPassword = Math.random().toString(36).slice(-8);
+
+    const newCllr: User = {
+      id: nextId,
+      name: request.name,
+      email: request.email,
+      phone: request.phone,
+      physicalAddress: "Thulamela Ward Precinct",
+      username: request.email.split("@")[0], // Simple username
+      role: "councillor",
+      employeeNumber: `EMP-CLLR-${request.wardNumber}`,
+      saIdNumber: request.saIdNumber,
+      wardNumber: request.wardNumber,
+      wardName: wardName,
+      politicalPosition: request.politicalPosition,
+      status: "active",
+      profilePicture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+      dateCreated: new Date().toISOString(),
+      tempPassword: tempPassword,
+      mustChangePassword: true
+    };
+
+    const updatedUsers = [...users, newCllr];
+    saveUsers(updatedUsers);
+
+    const updatedWards = wards.map(w => {
+      if (w.wardNumber === request.wardNumber) {
+        return { ...w, assignedCouncillorId: nextId, councillorName: request.name, contactDetails: request.phone };
+      }
+      return w;
+    });
+    saveWards(updatedWards);
+
+    // Update Firestore
+    updateDoc(doc(db, "accountRequests", request.id), { status: "approved" });
+
+    // Send notification to the new councillor
+    addNotification(nextId, "councillor", "Account Created", "Your councillor account has been approved and created.", "success");
+
+    onAddToast("Account Approved", `Account for ${request.name} created. Temp password: ${tempPassword} (Email/SMS sent).`, "success");
+    
+    // Refresh requests
+    setAccountRequests(prev => prev.filter(r => r.id !== request.id));
     loadDashboardData();
   };
 
@@ -700,6 +769,17 @@ export default function AdminDashboard({
             </button>
 
             <button
+              id="admin-tab-account-requests"
+              onClick={() => setActiveTab("account_requests")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+                activeTab === "account_requests" ? "bg-gov-blue text-white shadow-md shadow-gov-blue/20" : "hover:bg-slate-800 hover:text-white text-slate-400"
+              }`}
+            >
+              <UserPlus size={16} />
+              <span>Account Requests</span>
+            </button>
+
+            <button
               id="admin-tab-digital-forms"
               onClick={() => setActiveTab("digital_forms")}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
@@ -708,6 +788,17 @@ export default function AdminDashboard({
             >
               <Clipboard size={16} />
               <span>Digital Forms</span>
+            </button>
+
+            <button
+              id="admin-tab-service-notices"
+              onClick={() => setActiveTab("service_notices")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+                activeTab === "service_notices" ? "bg-gov-blue text-white shadow-md shadow-gov-blue/20" : "hover:bg-slate-800 hover:text-white text-slate-400"
+              }`}
+            >
+              <AlertTriangle size={16} />
+              <span>Service Notices</span>
             </button>
           </nav>
         </div>
@@ -766,8 +857,20 @@ export default function AdminDashboard({
         {activeTab === "dashboard" && (
           <div id="admin-pane-dashboard" className="space-y-6">
             
-            {/* 4 Cards Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 5 Cards Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div 
+                className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer"
+                onClick={() => setActiveTab("wards")}
+              >
+                <div className="text-gov-green flex justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-gov-green block">Active Wards</span>
+                  <Layers size={16} />
+                </div>
+                <span className="text-2xl font-black text-slate-800 font-mono">41</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase mt-1 block">Click for Ward Dashboard</span>
+              </div>
+
               <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all">
                 <div className="text-slate-400 flex justify-between mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Total Complaints</span>
@@ -990,7 +1093,7 @@ export default function AdminDashboard({
                         placeholder="e.g. Cllr Rendani Mulaudzi"
                         value={newCllrName}
                         onChange={(e) => setNewCllrName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-slate-950"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-slate-950 text-base"
                       />
                     </div>
 
@@ -1003,7 +1106,7 @@ export default function AdminDashboard({
                         placeholder="e.g. 8504125896084"
                         value={newCllrIdNumber}
                         onChange={(e) => setNewCllrIdNumber(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono text-base"
                       />
                     </div>
 
@@ -1015,7 +1118,7 @@ export default function AdminDashboard({
                         placeholder="e.g. EMP-CLLR-041"
                         value={newCllrEmpNumber}
                         onChange={(e) => setNewCllrEmpNumber(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono text-base"
                       />
                     </div>
                   </div>
@@ -1029,7 +1132,7 @@ export default function AdminDashboard({
                         placeholder="e.g. r.mulaudzi@thulamela.gov.za"
                         value={newCllrEmail}
                         onChange={(e) => setNewCllrEmail(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono text-base"
                       />
                     </div>
 
@@ -1041,7 +1144,7 @@ export default function AdminDashboard({
                         placeholder="e.g. 082 555 1234"
                         value={newCllrPhone}
                         onChange={(e) => setNewCllrPhone(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono text-base"
                       />
                     </div>
 
@@ -1050,7 +1153,7 @@ export default function AdminDashboard({
                       <select
                         value={newCllrWard}
                         onChange={(e) => setNewCllrWard(Number(e.target.value))}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold text-base"
                       >
                         {wards.map(w => (
                           <option key={w.wardNumber} value={w.wardNumber}>
@@ -1067,7 +1170,7 @@ export default function AdminDashboard({
                       <select
                         value={newCllrPolitical}
                         onChange={(e) => setNewCllrPolitical(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold text-base"
                       >
                         <option value="ANC Ward Councillor">African National Congress (ANC) Ward Councillor</option>
                         <option value="EFF Ward Representative">Economic Freedom Fighters (EFF) Ward Representative</option>
@@ -1083,7 +1186,7 @@ export default function AdminDashboard({
                         placeholder="e.g. https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150"
                         value={newCllrProfilePic}
                         onChange={(e) => setNewCllrProfilePic(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-slate-800"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-slate-800 text-base"
                       />
                     </div>
                   </div>
@@ -1097,7 +1200,7 @@ export default function AdminDashboard({
                         placeholder="e.g. cllr41"
                         value={newCllrUsername}
                         onChange={(e) => setNewCllrUsername(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold font-mono"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold font-mono text-base"
                       />
                     </div>
 
@@ -1109,7 +1212,7 @@ export default function AdminDashboard({
                         placeholder="••••••••"
                         value={newCllrPassword}
                         onChange={(e) => setNewCllrPassword(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-mono font-bold"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-mono font-bold text-base"
                       />
                     </div>
 
@@ -1121,7 +1224,7 @@ export default function AdminDashboard({
                         placeholder="••••••••"
                         value={newCllrConfirmPassword}
                         onChange={(e) => setNewCllrConfirmPassword(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-mono font-bold"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-mono font-bold text-base"
                       />
                     </div>
                   </div>
@@ -1149,7 +1252,7 @@ export default function AdminDashboard({
                     placeholder="Search by name, ID or username..."
                     value={councillorSearch}
                     onChange={(e) => setCouncillorSearch(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-8 pr-4"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-8 pr-4 text-base"
                   />
                   <Search className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
                 </div>
@@ -1222,90 +1325,12 @@ export default function AdminDashboard({
 
         {/* TAB 3: WARD MANAGEMENT MODULE (41 wards details) */}
         {activeTab === "wards" && (
-          <div id="admin-pane-wards" className="space-y-6">
-            
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="font-black text-slate-900 uppercase text-xs tracking-wider">Thulamela 41 Wards Stewardship</h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Assign, transfer, or edit geographical names and performance indicators across all local wards.</p>
-                </div>
-                <div className="relative w-72 text-xs">
-                  <input
-                    type="text"
-                    placeholder="Search by Ward name or number..."
-                    value={wardSearch}
-                    onChange={(e) => setWardSearch(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-8 pr-4"
-                  />
-                  <Search className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-slate-100">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                      <th className="p-4 font-mono">Ward Number</th>
-                      <th className="p-4">Ward Name / Village</th>
-                      <th className="p-4">Assigned Representative</th>
-                      <th className="p-4">Representative Phone</th>
-                      <th className="p-4 font-mono text-center">Total Inquiries</th>
-                      <th className="p-4 font-mono text-center">Resolved Case</th>
-                      <th className="p-4 font-mono text-center">Pending Case</th>
-                      <th className="p-4 text-center">Resolution Performance</th>
-                      <th className="p-4 text-center">Operation</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {filteredWards.map(w => {
-                      const { count, resolved, pending } = calculateWardComplaints(w.wardNumber);
-                      const performance = count > 0 ? Math.round((resolved / count) * 100) : 0;
-                      return (
-                        <tr key={w.wardNumber} className="hover:bg-slate-50/40">
-                          <td className="p-4 font-mono font-black text-slate-900">Ward {w.wardNumber}</td>
-                          <td className="p-4 font-bold text-slate-900">{w.wardName}</td>
-                          <td className="p-4 text-slate-600">
-                            {w.councillorName ? (
-                              <span className="font-bold text-slate-900">{w.councillorName}</span>
-                            ) : (
-                              <span className="text-red-500 font-bold italic uppercase text-[10px]">Vacant Ward Seat</span>
-                            )}
-                          </td>
-                          <td className="p-4 font-mono text-slate-500">{w.contactDetails || "N/A"}</td>
-                          <td className="p-4 font-mono text-center font-bold text-slate-800">{count}</td>
-                          <td className="p-4 font-mono text-center text-emerald-600 font-bold">{resolved}</td>
-                          <td className="p-4 font-mono text-center text-amber-600 font-bold">{pending}</td>
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center space-x-2">
-                              <span className="font-mono font-bold text-gov-blue">{performance}%</span>
-                              <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden inline-block">
-                                <div className="bg-gov-blue h-full rounded-full" style={{ width: `${performance}%` }}></div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center">
-                            <button
-                              id={`edit-ward-btn-${w.wardNumber}`}
-                              onClick={() => {
-                                setEditingWard(w);
-                                setWardEditName(w.wardName);
-                                setWardEditCouncillor(w.assignedCouncillorId || "");
-                              }}
-                              className="px-2.5 py-1 bg-gov-blue hover:bg-gov-blue-hover text-white text-[10px] font-bold uppercase rounded transition-all"
-                            >
-                              Edit / Assign
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
+          <WardManagement 
+            wards={wards} 
+            users={users} 
+            complaints={complaints} 
+            calculateWardComplaints={calculateWardComplaints} 
+          />
         )}
 
         {/* TAB 4: COMPLAINTS REGISTER / DISPATCH ROOM */}
@@ -1322,7 +1347,7 @@ export default function AdminDashboard({
                 <select 
                   value={complaintWardFilter} 
                   onChange={(e) => setComplaintWardFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-lg p-2"
+                  className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-base"
                 >
                   <option value="All">All Wards</option>
                   {wards.map(w => (
@@ -1334,7 +1359,7 @@ export default function AdminDashboard({
                 <select 
                   value={complaintStatusFilter} 
                   onChange={(e) => setComplaintStatusFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-lg p-2"
+                  className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-base"
                 >
                   <option value="All">All Statuses</option>
                   <option value="Pending">Pending</option>
@@ -1351,7 +1376,7 @@ export default function AdminDashboard({
                 placeholder="Search complaints by title, Cllr name or COMP reference..."
                 value={complaintSearch}
                 onChange={(e) => setComplaintSearch(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-4 font-semibold"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-4 font-semibold text-base"
               />
               <Search className="absolute left-3 top-3 text-slate-400" size={16} />
             </div>
@@ -1557,8 +1582,38 @@ export default function AdminDashboard({
           <DocumentManager currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
+        {activeTab === "account_requests" && (
+          <div id="admin-pane-account-requests" className="space-y-6 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+            <h2 className="text-xl font-black text-slate-900 uppercase">Account Requests</h2>
+            {accountRequests.length === 0 ? (
+              <p className="text-xs text-slate-500">No pending account requests.</p>
+            ) : (
+              <div className="space-y-3">
+                {accountRequests.map(req => (
+                  <div key={req.id} className="border border-slate-100 p-4 rounded-xl flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold">{req.name}</p>
+                      <p className="text-slate-500">{req.email} | Ward {req.wardNumber}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleApproveRequest(req)}
+                      className="bg-gov-green hover:bg-gov-green-hover text-white px-4 py-2 rounded-lg font-bold uppercase tracking-wider"
+                    >
+                      Approve
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === "digital_forms" && (
           <DigitalForms currentUser={currentUser} onAddToast={onAddToast} />
+        )}
+
+        {activeTab === "service_notices" && (
+          <ServiceNoticeManagement />
         )}
 
       </main>
@@ -1609,7 +1664,7 @@ export default function AdminDashboard({
                     // clear technician selection as department changed
                     setDispatchTechId("");
                   }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
                 >
                   <option value="">Awaiting Allocation</option>
                   {departments.map(dept => (
@@ -1624,7 +1679,7 @@ export default function AdminDashboard({
                 <select
                   value={dispatchTechId}
                   onChange={(e) => setDispatchTechId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
                 >
                   <option value="">Awaiting Dispatch</option>
                   {technicians
@@ -1638,20 +1693,21 @@ export default function AdminDashboard({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Priority Selector */}
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-700 block">Severity Level</label>
-                  <select
-                    value={dispatchPriority}
-                    onChange={(e) => setDispatchPriority(e.target.value as ComplaintPriority)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800"
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                    <option value="Critical">Critical</option>
-                  </select>
-                </div>
+                {currentUser.role !== "councillor" && (
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-700 block">Severity Level</label>
+                    <select
+                      value={dispatchPriority}
+                      onChange={(e) => setDispatchPriority(e.target.value as ComplaintPriority)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800 text-base"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                      <option value="Critical">Critical</option>
+                    </select>
+                  </div>
+                )}
 
                 {/* Status Selector */}
                 <div className="space-y-1.5">
@@ -1659,7 +1715,7 @@ export default function AdminDashboard({
                   <select
                     value={dispatchStatus}
                     onChange={(e) => setDispatchStatus(e.target.value as ComplaintStatus)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800 text-base"
                   >
                     <option value="Pending">Pending (Awaiting Allocation)</option>
                     <option value="Assigned">Assigned (Dispatched to Tech)</option>
@@ -1679,7 +1735,7 @@ export default function AdminDashboard({
                     placeholder="Provide detailed description of repair executed, valve sizes, Eskom transformer specs, etc."
                     value={resolutionNotes}
                     onChange={(e) => setResolutionNotes(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-medium leading-relaxed"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-medium leading-relaxed text-base"
                   ></textarea>
                 </div>
               )}
@@ -1735,7 +1791,7 @@ export default function AdminDashboard({
                   required
                   value={wardEditName}
                   onChange={(e) => setWardEditName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
                 />
               </div>
 
@@ -1744,7 +1800,7 @@ export default function AdminDashboard({
                 <select
                   value={wardEditCouncillor}
                   onChange={(e) => setWardEditCouncillor(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
                 >
                   <option value="">Vacant Seat</option>
                   {users.filter(u => u.role === "councillor" && u.status === "active").map(cllr => (

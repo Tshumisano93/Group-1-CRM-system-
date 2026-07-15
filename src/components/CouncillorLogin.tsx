@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Lock, User as UserIcon, ShieldCheck, CheckSquare, Eye, EyeOff, Building2 } from "lucide-react";
 import { getUsers, setCurrentUser, addAuditLog } from "../db";
 import { User } from "../types";
+import RequestAccountModal from "./RequestAccountModal";
 
 interface CouncillorLoginProps {
   onLoginSuccess: (user: User) => void;
@@ -15,6 +16,7 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,7 +103,7 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
                   placeholder="e.g. cllr1"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-4 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-semibold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-4 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-semibold text-base"
                 />
                 <UserIcon className="absolute left-3.5 top-3 text-slate-400" size={16} />
               </div>
@@ -116,7 +118,7 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-10 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-mono font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-10 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-mono font-bold text-base"
                 />
                 <Lock className="absolute left-3.5 top-3 text-slate-400" size={16} />
                 <button
@@ -135,7 +137,7 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded text-gov-green border-slate-300 focus:ring-gov-green"
+                  className="rounded text-gov-green border-slate-300 focus:ring-gov-green text-base"
                 />
                 <span>Remember Me</span>
               </label>
@@ -160,14 +162,27 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
                 <span>Authenticate Account</span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setShowRequestModal(true)}
+              className="w-full mt-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3.5 px-6 rounded-xl shadow-sm uppercase tracking-wider transition-all"
+            >
+              Request New Account
+            </button>
           </form>
+          {showRequestModal && (
+            <RequestAccountModal 
+              onClose={() => setShowRequestModal(false)} 
+              onAddToast={onAddToast}
+            />
+          )}
         </div>
 
         {/* Right column: Info & Tester Helper */}
         <div className="lg:col-span-6 space-y-6">
           <div className="bg-white text-slate-800 rounded-2xl p-6 sm:p-8 space-y-4 shadow-sm border border-slate-200">
             <span className="text-gov-blue font-extrabold uppercase text-[10px] font-sans tracking-widest block">
-              Batho Pele Portal Guidance
+              We Serve With Dedication
             </span>
             <h3 className="text-lg font-black uppercase text-slate-900 tracking-tight flex items-center">
               <Building2 className="mr-2 text-gov-green" size={18} />

@@ -1,10 +1,11 @@
 import React from "react";
 import { Award, Compass, Shield, Heart, CheckCircle2, TrendingUp, Building2, Terminal } from "lucide-react";
+import civicMonument from "../assets/images/thulamela_civic_monument.jpg";
 
 export default function PublicAbout() {
   const values = [
     {
-      title: "Batho Pele (People First)",
+      title: "We Serve With Dedication",
       desc: "Putting the needs and aspirations of our community members at the forefront of all planning and service provision decisions.",
       icon: <Heart className="text-red-600" size={24} />
     },
@@ -38,6 +39,17 @@ export default function PublicAbout() {
       
       {/* 1. Page Header & Introduction */}
       <div className="text-center max-w-4xl mx-auto space-y-4">
+        {/* Civic Monument Header Image */}
+        <div className="w-full mb-8">
+          <img
+            src={civicMonument}
+            alt="Thulamela Municipality civic monument"
+            className="w-full h-auto rounded-3xl shadow-lg"
+          />
+          <p className="text-center text-xs text-slate-500 mt-3 italic">
+            The Thulamela Municipality civic monument, inscribed with the municipality's motto: 'We Serve With Dedication.'
+          </p>
+        </div>
         <span className="bg-gov-green/10 text-gov-green font-bold text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-gov-green/20">
           Know Your Municipality
         </span>
@@ -109,7 +121,7 @@ export default function PublicAbout() {
       <div className="space-y-6">
         <div className="text-center max-w-2xl mx-auto">
           <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Our Core Values</h2>
-          <p className="text-xs text-slate-500 mt-1">Guided by the Batho Pele principles to deliver respectful public care</p>
+          <p className="text-xs text-slate-500 mt-1">Guided by our motto, 'We Serve With Dedication,' to deliver respectful public care</p>
           <div className="w-12 h-1 bg-gov-yellow mx-auto mt-2"></div>
         </div>
 
@@ -182,7 +194,7 @@ export default function PublicAbout() {
 
           <div className="border-t border-slate-100 pt-4 mt-6 flex justify-between items-center text-[10px] font-mono text-slate-400 relative z-10">
             <span>PLATFORM VER: 1.0.0</span>
-            <span className="text-gov-green font-bold uppercase">BATHU PELE DIGITAL CO-OP</span>
+            <span className="text-gov-green font-bold uppercase">WE SERVE WITH DEDICATION DIGITAL CO-OP</span>
           </div>
         </div>
       </div>

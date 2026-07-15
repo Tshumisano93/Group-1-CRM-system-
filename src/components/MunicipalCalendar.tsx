@@ -417,7 +417,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
               placeholder="e.g. Ward Reservoir Leak Check"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-gov-green"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-gov-green text-base"
               required
             />
           </div>
@@ -429,7 +429,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
               placeholder="e.g. Block D Reservoir"
               value={newLocation}
               onChange={(e) => setNewLocation(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-gov-green"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-gov-green text-base"
               required
             />
           </div>
@@ -439,7 +439,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
             <select
               value={newType}
               onChange={(e) => setNewType(e.target.value as CalendarEvent["type"])}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-gov-green"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-gov-green text-base"
             >
               <option value="inspection">Site Inspection</option>
               <option value="technician_visit">Technician Repair Visit</option>
@@ -455,7 +455,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
               type="datetime-local"
               value={newStartDate}
               onChange={(e) => setNewStartDate(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
               required
             />
           </div>
@@ -466,7 +466,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
               type="datetime-local"
               value={newEndDate}
               onChange={(e) => setNewEndDate(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
               required
             />
           </div>
@@ -476,7 +476,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
             <select
               value={newWard}
               onChange={(e) => setNewWard(Number(e.target.value))}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
             >
               {wards.map(w => (
                 <option key={w.wardNumber} value={w.wardNumber}>Ward {w.wardNumber} - {w.wardName}</option>
@@ -489,7 +489,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
             <select
               value={newAssignedUser}
               onChange={(e) => setNewAssignedUser(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
             >
               <option value="">-- No Specific Allocation --</option>
               {technicians.map(t => (
@@ -505,7 +505,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
               placeholder="e.g. COMP-1001"
               value={newComplaintId}
               onChange={(e) => setNewComplaintId(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
             />
           </div>
 
@@ -515,7 +515,7 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
               placeholder="Brief summary regarding meeting outcomes or inspection checklist items..."
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2 h-14 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 h-14 focus:outline-none text-base"
             />
           </div>
 

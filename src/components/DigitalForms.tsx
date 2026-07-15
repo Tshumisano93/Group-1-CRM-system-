@@ -214,7 +214,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     type="text"
                     value={inspector}
                     disabled
-                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 font-bold cursor-not-allowed"
+                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2 font-bold cursor-not-allowed text-base"
                   />
                 </div>
                 <div className="space-y-1">
@@ -224,7 +224,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     placeholder="e.g. Makwarela Block F Reservoir"
                     value={siteLocation}
                     onChange={(e) => setSiteLocation(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
                     required
                   />
                 </div>
@@ -233,7 +233,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                   <select
                     value={leakSeverity}
                     onChange={(e) => setLeakSeverity(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-semibold text-slate-700"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-semibold text-slate-700 text-base"
                   >
                     <option value="Low">Low (Minor Weeping)</option>
                     <option value="Medium">Medium (Active Drip)</option>
@@ -247,7 +247,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     placeholder="e.g. 3.5 Hours"
                     value={laborHours}
                     onChange={(e) => setLaborHours(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
                   />
                 </div>
                 <div className="space-y-1 md:col-span-2">
@@ -257,7 +257,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     placeholder="e.g. 110mm PVC pipe coupler, pipe sealing adhesive, 2 gaskets"
                     value={materialsUsed}
                     onChange={(e) => setMaterialsUsed(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
                   />
                 </div>
               </div>
@@ -273,7 +273,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     placeholder="e.g. Transformer Box Substation 12"
                     value={siteLocation}
                     onChange={(e) => setSiteLocation(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none text-base"
                     required
                   />
                 </div>
@@ -283,7 +283,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     type="date"
                     value={completionDate}
                     onChange={(e) => setCompletionDate(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-bold text-slate-700"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-bold text-slate-700 text-base"
                     required
                   />
                 </div>
@@ -292,7 +292,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                   <select
                     value={satisfactionScore}
                     onChange={(e) => setSatisfactionScore(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-bold text-slate-700"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-bold text-slate-700 text-base"
                   >
                     <option value="5">5/5 - Highly Satisfied</option>
                     <option value="4">4/5 - Satisfied</option>
@@ -307,7 +307,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     id="rect-req"
                     checked={rectificationRequired}
                     onChange={(e) => setRectificationRequired(e.target.checked)}
-                    className="w-4 h-4 text-gov-green focus:ring-gov-green accent-gov-green"
+                    className="w-4 h-4 text-gov-green focus:ring-gov-green accent-gov-green text-base"
                   />
                   <label htmlFor="rect-req" className="font-bold text-slate-700">Follow-up Rectification Needed?</label>
                 </div>
@@ -317,7 +317,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     placeholder="Provide diagnostic readings, pressure metrics, or site cleanup confirmation remarks..."
                     value={technicianNotes}
                     onChange={(e) => setTechnicianNotes(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 h-14 focus:outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2.5 h-14 focus:outline-none text-base"
                   />
                 </div>
               </div>
@@ -338,7 +338,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                       disabled
                       placeholder="Coordinates not locked"
                       value={capturedGps}
-                      className="flex-grow bg-slate-100 border border-slate-200 rounded-lg p-2 font-mono text-[10px] font-bold text-gov-blue cursor-not-allowed"
+                      className="flex-grow bg-slate-100 border border-slate-200 rounded-lg p-2 font-mono font-bold text-gov-blue cursor-not-allowed text-base"
                     />
                     <button
                       type="button"
@@ -361,7 +361,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                       placeholder="Type Full Name to Certify"
                       value={electronicSignature}
                       onChange={(e) => setElectronicSignature(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 pl-8 focus:outline-none font-sans italic font-bold text-slate-800"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 pl-8 focus:outline-none font-sans italic font-bold text-slate-800 text-base"
                       required
                     />
                     <Signature className="absolute left-2.5 top-2.5 text-slate-400" size={13} />
@@ -408,7 +408,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                 placeholder="Search compliance forms..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-base"
               />
               <Search className="absolute left-3 top-2 text-slate-400" size={12} />
             </div>

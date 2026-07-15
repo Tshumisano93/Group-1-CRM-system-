@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Menu, X, ShieldAlert, Calendar, Mail, FileText } from "lucide-react";
+import municipalityLogo from "../assets/images/thulamela_coat_of_arms.png";
 
 interface PublicNavbarProps {
   currentView: string;
@@ -52,9 +53,7 @@ export default function PublicNavbar({
               onClick={() => onNavigate("home")} 
               className="flex items-center space-x-3 cursor-pointer group"
             >
-              <div className="w-12 h-12 bg-gov-yellow rounded-full flex items-center justify-center font-extrabold text-black border-2 border-gov-green shadow-sm text-sm">
-                TM
-              </div>
+              <img src={municipalityLogo} alt="Thulamela Municipality Logo" className="w-12 h-12 object-contain rounded-full shadow-sm border border-slate-200" />
               <div>
                 <h1 className="text-lg font-extrabold text-gov-green leading-tight tracking-tight uppercase">
                   THULAMELA

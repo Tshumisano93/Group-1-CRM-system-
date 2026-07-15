@@ -9,8 +9,9 @@ import {
   getSyncStatus
 } from "../db";
 import { User, Complaint, Technician, ComplaintLog, ComplaintComment, ComplaintStatus, ComplaintPriority, UserRole } from "../types";
+import { Skeleton, SkeletonCard, DashboardSkeleton } from "./Skeleton";
 import { 
-  LayoutDashboard, 
+  LayoutDashboard,
   Wrench, 
   Calendar, 
   Clock, 
@@ -68,6 +69,7 @@ export default function TechnicianDashboard({
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [techProfile, setTechProfile] = useState<Technician | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Modal Actions States
   const [rejectionReason, setRejectionReason] = useState("");
@@ -133,8 +135,10 @@ export default function TechnicianDashboard({
   };
 
   useEffect(() => {
+    setIsLoading(true);
     loadTechData();
     setSyncState(getSyncStatus());
+    setIsLoading(false);
 
     const handleDbUpdate = () => {
       loadTechData();
@@ -584,6 +588,8 @@ export default function TechnicianDashboard({
 
   const activeJobsCount = complaints.filter(c => c.status !== "Resolved" && c.status !== "Closed" && c.status !== "Rejected" && c.status !== "Cancelled").length;
   const resolvedJobsCount = complaints.filter(c => c.status === "Resolved" || c.status === "Closed").length;
+
+  if (isLoading) return <DashboardSkeleton />;
 
   return (
     <div id="tech-dashboard-container" className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
@@ -1273,7 +1279,7 @@ export default function TechnicianDashboard({
               </div>
 
               {/* Details grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 font-bold">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 font-bold">
                 <div>
                   <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Current Status</span>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 uppercase inline-block mt-1">
@@ -1282,13 +1288,18 @@ export default function TechnicianDashboard({
                 </div>
 
                 <div>
-                  <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Reporting Councillor</span>
-                  <p className="text-slate-900 mt-1">{selectedComplaint.reporterName}</p>
+                  <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Priority Level</span>
+                  <p className="text-red-700 uppercase mt-1">{selectedComplaint.priority}</p>
                 </div>
 
                 <div>
-                  <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Priority Severity</span>
-                  <p className="text-red-700 uppercase mt-1">{selectedComplaint.priority}</p>
+                  <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Emergency Level</span>
+                  <p className="text-red-700 uppercase mt-1">{selectedComplaint.emergencyLevel || 'Medium'}</p>
+                </div>
+
+                <div>
+                  <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Reporting Councillor</span>
+                  <p className="text-slate-900 mt-1">{selectedComplaint.reporterName}</p>
                 </div>
               </div>
 
@@ -1390,7 +1401,7 @@ export default function TechnicianDashboard({
                     placeholder="Type message for the Ward Councillor..."
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue focus:bg-white transition-all font-bold"
+                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue focus:bg-white transition-all font-bold text-base"
                   />
                   <button
                     onClick={() => handleAddComment(selectedComplaint.id)}
@@ -1430,7 +1441,7 @@ export default function TechnicianDashboard({
               placeholder="Enter comprehensive rejection reasoning..."
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
             />
 
             <div className="flex justify-end space-x-2 text-xs font-bold">
@@ -1463,7 +1474,7 @@ export default function TechnicianDashboard({
               placeholder="e.g. Please provide a close landmark or a contact phone of a resident at the corner..."
               value={additionalInfoText}
               onChange={(e) => setAdditionalInfoText(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
             />
 
             <div className="flex justify-end space-x-2 text-xs font-bold">
@@ -1500,7 +1511,7 @@ export default function TechnicianDashboard({
                   step="10"
                   value={progressPercent}
                   onChange={(e) => setProgressPercent(Number(e.target.value))}
-                  className="w-full accent-gov-blue cursor-pointer h-2 bg-slate-200 rounded-lg"
+                  className="w-full accent-gov-blue cursor-pointer h-2 bg-slate-200 rounded-lg text-base"
                 />
                 <div className="flex justify-between text-[10px] text-slate-400 font-mono mt-0.5">
                   <span>0% (Inspecting)</span>
@@ -1515,7 +1526,7 @@ export default function TechnicianDashboard({
                   type="date"
                   value={estCompletionDate}
                   onChange={(e) => setEstCompletionDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold font-mono"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold font-mono text-base"
                 />
               </div>
 
@@ -1557,7 +1568,7 @@ export default function TechnicianDashboard({
                     placeholder="Pre-loaded evidence photo URL..."
                     value={progressMediaUrl}
                     onChange={(e) => setProgressMediaUrl(e.target.value)}
-                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-semibold"
+                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-base"
                   />
                   <button 
                     type="button"
@@ -1586,7 +1597,7 @@ export default function TechnicianDashboard({
                   placeholder="e.g. Trenches fully prepared, waiting for cement coupling..."
                   value={progressNotes}
                   onChange={(e) => setProgressNotes(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold text-base"
                 />
               </div>
             </div>
@@ -1621,7 +1632,7 @@ export default function TechnicianDashboard({
                 <select
                   value={materialType}
                   onChange={(e) => setMaterialType(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold text-base"
                 >
                   <option value="PVC Water Pipes 110mm">PVC Water Pipes 110mm</option>
                   <option value="Heavy Duty Couplings">Heavy Duty Couplings</option>
@@ -1640,7 +1651,7 @@ export default function TechnicianDashboard({
                     min="1"
                     value={materialQty}
                     onChange={(e) => setMaterialQty(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-base"
                   />
                 </div>
 
@@ -1650,7 +1661,7 @@ export default function TechnicianDashboard({
                     type="text"
                     value={materialSupplier}
                     onChange={(e) => setMaterialSupplier(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-base"
                   />
                 </div>
               </div>
@@ -1689,7 +1700,7 @@ export default function TechnicianDashboard({
                     min="1"
                     value={completionHours}
                     onChange={(e) => setCompletionHours(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-base"
                   />
                 </div>
 
@@ -1700,7 +1711,7 @@ export default function TechnicianDashboard({
                     placeholder="e.g. 1x PVC pipe, 2x couplers"
                     value={completionMaterialsUsed}
                     onChange={(e) => setCompletionMaterialsUsed(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-base"
                   />
                 </div>
               </div>
@@ -1723,7 +1734,7 @@ export default function TechnicianDashboard({
                   placeholder="Provide precise technical details of how the issue was fixed..."
                   value={completionNotes}
                   onChange={(e) => setCompletionNotes(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold leading-normal"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold leading-normal text-base"
                 />
               </div>
             </div>

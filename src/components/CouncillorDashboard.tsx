@@ -48,6 +48,10 @@ import MunicipalCalendar from "./MunicipalCalendar";
 import InteractiveGIS from "./InteractiveGIS";
 import DocumentManager from "./DocumentManager";
 import DigitalForms from "./DigitalForms";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "../firebase";
+import FileUploader from "./FileUploader";
+
 
 interface CouncillorDashboardProps {
   currentUser: User;
@@ -75,7 +79,7 @@ export default function CouncillorDashboard({
   const [compCategory, setCompCategory] = useState("Water Services");
   const [compSubCategory, setCompSubCategory] = useState("Pipe Burst");
   const [compPriority, setCompPriority] = useState<ComplaintPriority>("Medium");
-  const [compPhoto, setCompPhoto] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   // Extended lodging fields
@@ -85,9 +89,6 @@ export default function CouncillorDashboard({
   const [gpsCoordinates, setGpsCoordinates] = useState("");
   const [landmark, setLandmark] = useState("");
   const [preferredContactMethod, setPreferredContactMethod] = useState<"SMS" | "Email" | "Call" | "WhatsApp">("SMS");
-  const [supportingDocUrl, setSupportingDocUrl] = useState("");
-  const [voiceNoteUrl, setVoiceNoteUrl] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
   const [citizenName, setCitizenName] = useState("");
   const [citizenContactNumber, setCitizenContactNumber] = useState("");
   const [affectedResidents, setAffectedResidents] = useState(50);
@@ -199,7 +200,13 @@ export default function CouncillorDashboard({
   const resolvedCount = complaints.filter(c => c.status === "Resolved").length;
   const closedCount = complaints.filter(c => c.status === "Closed").length;
 
-  const handleLodgeComplaint = (e: React.FormEvent, isDraftFlag: boolean = false) => {
+  const uploadFile = async (file: File) => {
+    const storageRef = ref(storage, `complaints/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return { type: file.type, url: await getDownloadURL(storageRef) };
+  };
+
+  const handleLodgeComplaint = async (e: React.FormEvent, isDraftFlag: boolean = false) => {
     e.preventDefault();
     if (!compTitle.trim() || !compDesc.trim()) {
       onAddToast("Validation Alert", "Please fill in the complaint title and description.", "warning");
@@ -231,7 +238,7 @@ export default function CouncillorDashboard({
         priority: compPriority,
         dateCreated: new Date().toISOString(),
         dateUpdated: new Date().toISOString(),
-        referencePhoto: compPhoto || undefined,
+        referencePhoto: attachments.filter(f => f.type.startsWith('image/'))[0] ? URL.createObjectURL(attachments.filter(f => f.type.startsWith('image/'))[0]) : undefined,
         
         streetAddress: streetAddress.trim(),
         village: village.trim(),
@@ -239,10 +246,8 @@ export default function CouncillorDashboard({
         gpsCoordinates: gpsCoordinates.trim() || "-22.956, 30.481",
         landmark: landmark.trim(),
         preferredContactMethod,
-        supportingImages: compPhoto ? [compPhoto] : [],
-        supportingDocuments: supportingDocUrl ? [supportingDocUrl] : [],
-        voiceNote: voiceNoteUrl || undefined,
-        video: videoUrl || undefined,
+        supportingImages: attachments.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f)),
+        video: attachments.filter(f => f.type.startsWith('video/')).map(f => URL.createObjectURL(f))[0] || undefined,
         citizenName: citizenName.trim() || undefined,
         citizenContactNumber: citizenContactNumber.trim() || undefined,
         affectedResidents,
@@ -294,19 +299,16 @@ export default function CouncillorDashboard({
       setCompCategory("Water Services");
       setCompSubCategory("Pipe Burst");
       setCompPriority("Medium");
-      setCompPhoto("");
       setStreetAddress("");
       setVillage("");
       setArea("");
       setGpsCoordinates("");
       setLandmark("");
-      setSupportingDocUrl("");
-      setVoiceNoteUrl("");
-      setVideoUrl("");
       setCitizenName("");
       setCitizenContactNumber("");
       setAffectedResidents(50);
       setEmergencyLevel("Medium");
+      setAttachments([]);
       
       setSubmitting(false);
 
@@ -977,7 +979,7 @@ export default function CouncillorDashboard({
                         type="text"
                         disabled
                         value={`Ward ${currentUser.wardNumber || 1} - ${currentUser.wardName || "Makwarela"}`}
-                        className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-bold font-sans text-slate-700 pl-10 cursor-not-allowed"
+                        className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-bold font-sans text-slate-700 pl-10 cursor-not-allowed text-base"
                       />
                       <Lock className="absolute left-3.5 top-3.5 text-slate-400" size={14} />
                     </div>
@@ -997,7 +999,7 @@ export default function CouncillorDashboard({
                         else if (cat === "Solid Waste") setCompSubCategory("Illegal Dumping");
                         else setCompSubCategory("General Failure");
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-base"
                     >
                       <option value="Water Services">Water Services</option>
                       <option value="Electricity & Energy">Electricity & Energy</option>
@@ -1014,7 +1016,7 @@ export default function CouncillorDashboard({
                     <select
                       value={compSubCategory}
                       onChange={(e) => setCompSubCategory(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-gov-blue"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-gov-blue text-base"
                     >
                       {compCategory === "Water Services" && (
                         <>
@@ -1062,53 +1064,32 @@ export default function CouncillorDashboard({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700 block">Priority Level (Response-bound) *</label>
-                    <div className="flex space-x-2">
-                      {(["Low", "Medium", "High", "Critical"] as ComplaintPriority[]).map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setCompPriority(p)}
-                          className={`flex-1 py-2 rounded-lg font-bold uppercase tracking-wider text-[9px] border transition-all ${
-                            compPriority === p
-                              ? p === "Low" ? "bg-slate-200 text-slate-700 border-slate-300"
-                                : p === "Medium" ? "bg-blue-600 text-white border-blue-600"
-                                : p === "High" ? "bg-orange-500 text-white border-orange-500"
-                                : "bg-red-600 text-white border-red-600 animate-pulse"
-                              : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      ))}
+                {currentUser.role !== "councillor" && (
+                  <div className="grid grid-cols-1 md:grid-cols-1 gap-4 pt-2">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Emergency Level (Disaster Scale) *</label>
+                      <div className="flex space-x-2">
+                        {(["Low", "Medium", "Severe", "Disastrous"] as const).map((el) => (
+                          <button
+                            key={el}
+                            type="button"
+                            onClick={() => setEmergencyLevel(el)}
+                            className={`flex-1 py-2 rounded-lg font-bold uppercase tracking-wider text-[9px] border transition-all ${
+                              emergencyLevel === el
+                                ? el === "Low" ? "bg-slate-100 text-slate-700 border-slate-200"
+                                  : el === "Medium" ? "bg-teal-600 text-white border-teal-600"
+                                  : el === "Severe" ? "bg-amber-600 text-white border-amber-600"
+                                  : "bg-red-700 text-white border-red-700 animate-bounce"
+                                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            {el}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700 block">Emergency Level (Disaster Scale) *</label>
-                    <div className="flex space-x-2">
-                      {(["Low", "Medium", "Severe", "Disastrous"] as const).map((el) => (
-                        <button
-                          key={el}
-                          type="button"
-                          onClick={() => setEmergencyLevel(el)}
-                          className={`flex-1 py-2 rounded-lg font-bold uppercase tracking-wider text-[9px] border transition-all ${
-                            emergencyLevel === el
-                              ? el === "Low" ? "bg-slate-100 text-slate-700 border-slate-200"
-                                : el === "Medium" ? "bg-teal-600 text-white border-teal-600"
-                                : el === "Severe" ? "bg-amber-600 text-white border-amber-600"
-                                : "bg-red-700 text-white border-red-700 animate-bounce"
-                              : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          {el}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* SECTION 2: COMPLAINT DESCRIPTION */}
@@ -1122,7 +1103,7 @@ export default function CouncillorDashboard({
                     placeholder="e.g. Broken water pipeline flooding main arterial road"
                     value={compTitle}
                     onChange={(e) => setCompTitle(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-base"
                   />
                 </div>
 
@@ -1134,7 +1115,7 @@ export default function CouncillorDashboard({
                     placeholder="Provide a professional summary of the failure (e.g. pressure drops, water color, specific times, safety impacts)..."
                     value={compDesc}
                     onChange={(e) => setCompDesc(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-medium leading-relaxed"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-medium leading-relaxed text-base"
                   ></textarea>
                 </div>
 
@@ -1261,7 +1242,7 @@ export default function CouncillorDashboard({
                       placeholder="e.g. 1045 Manyeleti Street"
                       value={streetAddress}
                       onChange={(e) => setStreetAddress(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1272,7 +1253,7 @@ export default function CouncillorDashboard({
                       placeholder="e.g. Sibasa / Thohoyandou"
                       value={village}
                       onChange={(e) => setVillage(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1283,7 +1264,7 @@ export default function CouncillorDashboard({
                       placeholder="e.g. Ward 1 Main Suburb"
                       value={area}
                       onChange={(e) => setArea(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
                   </div>
                 </div>
@@ -1310,7 +1291,7 @@ export default function CouncillorDashboard({
                       placeholder="-22.95567, 30.48112"
                       value={gpsCoordinates}
                       onChange={(e) => setGpsCoordinates(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-700"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-700 text-base"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1320,7 +1301,7 @@ export default function CouncillorDashboard({
                       placeholder="e.g. Behind the secondary school water tower"
                       value={landmark}
                       onChange={(e) => setLandmark(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
                   </div>
                 </div>
@@ -1337,7 +1318,7 @@ export default function CouncillorDashboard({
                       placeholder="e.g. Nelson Ramabulana"
                       value={citizenName}
                       onChange={(e) => setCitizenName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1347,7 +1328,7 @@ export default function CouncillorDashboard({
                       placeholder="e.g. +27 72 123 4567"
                       value={citizenContactNumber}
                       onChange={(e) => setCitizenContactNumber(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1355,7 +1336,7 @@ export default function CouncillorDashboard({
                     <select
                       value={preferredContactMethod}
                       onChange={(e) => setPreferredContactMethod(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
                     >
                       <option value="SMS">SMS Notification</option>
                       <option value="WhatsApp">WhatsApp Message</option>
@@ -1377,7 +1358,7 @@ export default function CouncillorDashboard({
                     step="10"
                     value={affectedResidents}
                     onChange={(e) => setAffectedResidents(Number(e.target.value))}
-                    className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-gov-green"
+                    className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-gov-green text-base"
                   />
                   <div className="flex justify-between text-[9px] text-slate-400 font-mono">
                     <span>1 Citizen</span>
@@ -1391,108 +1372,9 @@ export default function CouncillorDashboard({
               {/* SECTION 5: MEDIA & ATTACHMENTS */}
               <div className="space-y-3">
                 <h3 className="text-[11px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1">5. Technical Attachments</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700 block">Reference Photo Attachment (Optional URL)</label>
-                    <div className="relative">
-                      <input
-                        type="url"
-                        placeholder="https://images.unsplash.com/photo-..."
-                        value={compPhoto}
-                        onChange={(e) => setCompPhoto(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 pr-20 font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const mockPics = [
-                            "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=500",
-                            "https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?w=500",
-                            "https://images.unsplash.com/photo-1581094288338-2314dddb7ecc?w=500"
-                          ];
-                          setCompPhoto(mockPics[Math.floor(Math.random() * mockPics.length)]);
-                          onAddToast("Mock Photo Loaded", "A simulated infrastructure photo has been selected.", "info");
-                        }}
-                        className="absolute right-1 top-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 rounded font-bold uppercase text-[9px]"
-                      >
-                        Auto-Attach
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-slate-700 block">Supporting PDF Documents (Optional URL)</label>
-                    <div className="relative">
-                      <input
-                        type="url"
-                        placeholder="e.g. https://thulamela.gov.za/docs/survey.pdf"
-                        value={supportingDocUrl}
-                        onChange={(e) => setSupportingDocUrl(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 pr-20 font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSupportingDocUrl("https://thulamela.gov.za/docs/engineering_survey_report_2026_w1.pdf");
-                          onAddToast("Document Simulated", "Official PDF report mock attached.", "success");
-                        }}
-                        className="absolute right-1 top-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 rounded font-bold uppercase text-[9px]"
-                      >
-                        Sample PDF
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-                  <div className="space-y-1.5 bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-between">
-                    <div>
-                      <h4 className="font-bold text-slate-700 uppercase text-[10px]">6. Voice Note Memo Simulation</h4>
-                      <p className="text-[9px] text-slate-400 mt-0.5">Press record to capture citizen descriptions directly from the field.</p>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVoiceNoteUrl("https://thulamela.gov.za/audio/citizen_complaint_record_04.mp3");
-                          onAddToast("Voice Memo Simulated", "A 45-second audio description has been recorded successfully.", "success");
-                        }}
-                        className="px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-[9px] font-bold uppercase tracking-wider flex items-center space-x-1"
-                      >
-                        <span className="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping"></span>
-                        <span>Simulate Audio Recording</span>
-                      </button>
-                      {voiceNoteUrl && (
-                        <span className="text-[9px] text-emerald-600 font-bold font-mono">
-                          ✓ Saved: memo.mp3
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-between">
-                    <div>
-                      <h4 className="font-bold text-slate-700 uppercase text-[10px]">7. Video Telemetry Capture</h4>
-                      <p className="text-[9px] text-slate-400 mt-0.5">Attach a fast streaming video clip representing the failure.</p>
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setVideoUrl("https://thulamela.gov.za/video/pipeline_leakage_raw.mp4");
-                          onAddToast("Video Uploaded", "Simulated streaming MP4 has been attached successfully.", "success");
-                        }}
-                        className="px-3 py-2 bg-gov-blue/10 text-gov-blue hover:bg-gov-blue/20 rounded-lg text-[9px] font-bold uppercase tracking-wider"
-                      >
-                        Simulate video upload
-                      </button>
-                      {videoUrl && (
-                        <span className="text-[9px] text-emerald-600 font-bold font-mono">
-                          ✓ Saved: leak_raw.mp4
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 block">Supporting Documents & Photos</label>
+                  <FileUploader files={attachments} setFiles={setAttachments} />
                 </div>
               </div>
 
@@ -1577,7 +1459,7 @@ export default function CouncillorDashboard({
                   placeholder="Search case title, description, or COMP reference..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-4 font-semibold focus:outline-none focus:border-gov-blue focus:bg-white transition-all shadow-inner"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-10 pr-4 font-semibold focus:outline-none focus:border-gov-blue focus:bg-white transition-all shadow-inner text-base"
                 />
                 <Search className="absolute left-3.5 top-3 text-slate-400" size={16} />
               </div>
@@ -1587,7 +1469,7 @@ export default function CouncillorDashboard({
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue text-base"
                 >
                   <option value="All">All Statuses</option>
                   <option value="Pending">Pending</option>
@@ -1602,7 +1484,7 @@ export default function CouncillorDashboard({
                 <select
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue text-base"
                 >
                   <option value="All">All Priorities</option>
                   <option value="Low">Low</option>
@@ -1851,7 +1733,7 @@ export default function CouncillorDashboard({
                     required
                     value={profName}
                     onChange={(e) => setProfName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800 text-base"
                   />
                 </div>
 
@@ -1861,7 +1743,7 @@ export default function CouncillorDashboard({
                     type="text"
                     disabled
                     value={currentUser.saIdNumber || "7811225893081"}
-                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-500 cursor-not-allowed font-bold"
+                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-500 cursor-not-allowed font-bold text-base"
                   />
                 </div>
               </div>
@@ -1874,7 +1756,7 @@ export default function CouncillorDashboard({
                     required
                     value={profEmail}
                     onChange={(e) => setProfEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold font-mono text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold font-mono text-slate-800 text-base"
                   />
                 </div>
 
@@ -1885,7 +1767,7 @@ export default function CouncillorDashboard({
                     required
                     value={profPhone}
                     onChange={(e) => setProfPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold font-mono text-slate-800"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold font-mono text-slate-800 text-base"
                   />
                 </div>
               </div>
@@ -1897,7 +1779,7 @@ export default function CouncillorDashboard({
                     type="text"
                     disabled
                     value={`Ward ${currentUser.wardNumber} - ${currentUser.wardName}`}
-                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-500 cursor-not-allowed"
+                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-500 cursor-not-allowed text-base"
                   />
                 </div>
 
@@ -1907,7 +1789,7 @@ export default function CouncillorDashboard({
                     type="text"
                     disabled
                     value={currentUser.employeeNumber || "EMP-CLLR-001"}
-                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-500 cursor-not-allowed font-bold"
+                    className="w-full bg-slate-100 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-500 cursor-not-allowed font-bold text-base"
                   />
                 </div>
               </div>
@@ -1919,7 +1801,7 @@ export default function CouncillorDashboard({
                   required
                   value={profAddress}
                   onChange={(e) => setProfAddress(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-800 text-base"
                 />
               </div>
 
@@ -1934,7 +1816,7 @@ export default function CouncillorDashboard({
                       placeholder="Enter new secret password"
                       value={profPassword}
                       onChange={(e) => setProfPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-800"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-mono text-slate-800 text-base"
                     />
                   </div>
 
@@ -1945,7 +1827,7 @@ export default function CouncillorDashboard({
                         type="checkbox"
                         checked={profTwoFactor}
                         onChange={(e) => setProfTwoFactor(e.target.checked)}
-                        className="rounded text-gov-green border-slate-300 focus:ring-gov-green h-4 w-4"
+                        className="rounded text-gov-green border-slate-300 focus:ring-gov-green h-4 w-4 text-base"
                       />
                       <span className="font-bold text-slate-700 select-none">Enable OTP SMS verification on login</span>
                     </label>
@@ -1982,17 +1864,17 @@ export default function CouncillorDashboard({
                 <h4 className="text-slate-900 font-bold uppercase border-b border-slate-100 pb-1.5 text-[11px]">System Notification Toggles</h4>
                 
                 <label className="flex items-center space-x-3 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded text-gov-green border-slate-300 focus:ring-gov-green" />
+                  <input type="checkbox" defaultChecked className="rounded text-gov-green border-slate-300 focus:ring-gov-green text-base" />
                   <span>Dispatch SMS notification automatically when technician is assigned to my ticket</span>
                 </label>
 
                 <label className="flex items-center space-x-3 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded text-gov-green border-slate-300 focus:ring-gov-green" />
+                  <input type="checkbox" defaultChecked className="rounded text-gov-green border-slate-300 focus:ring-gov-green text-base" />
                   <span>Send weekly compiled spreadsheet summaries to my email address</span>
                 </label>
 
                 <label className="flex items-center space-x-3 cursor-pointer">
-                  <input type="checkbox" className="rounded text-gov-green border-slate-300 focus:ring-gov-green" />
+                  <input type="checkbox" className="rounded text-gov-green border-slate-300 focus:ring-gov-green text-base" />
                   <span>Receive system announcements for neighbouring Limpopo wards</span>
                 </label>
               </div>
@@ -2077,26 +1959,30 @@ export default function CouncillorDashboard({
                   </span>
                 </div>
 
-                <div>
-                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Assigned Field Staff</span>
-                  <p className="text-xs font-bold text-slate-900 mt-1">
-                    {selectedComplaint.assignedTechnicianName || "Awaiting Dispatch"}
-                  </p>
-                </div>
+                {currentUser.role !== "councillor" && (
+                  <>
+                    <div>
+                      <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Assigned Field Staff</span>
+                      <p className="text-xs font-bold text-slate-900 mt-1">
+                        {selectedComplaint.assignedTechnicianName || "Awaiting Dispatch"}
+                      </p>
+                    </div>
 
-                <div>
-                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">SLA Priority</span>
-                  <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold ${getPriorityBadge(selectedComplaint.priority)}`}>
-                    {selectedComplaint.priority}
-                  </span>
-                </div>
+                    <div>
+                      <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">SLA Priority</span>
+                      <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold ${getPriorityBadge(selectedComplaint.priority)}`}>
+                        {selectedComplaint.priority}
+                      </span>
+                    </div>
 
-                <div>
-                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Disaster Level</span>
-                  <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 font-black rounded text-[10px] uppercase">
-                    {selectedComplaint.emergencyLevel || "Medium"}
-                  </span>
-                </div>
+                    <div>
+                      <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Disaster Level</span>
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 font-black rounded text-[10px] uppercase">
+                        {selectedComplaint.emergencyLevel || "Medium"}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* SERVICE CLASSIFICATION & DESCRIPTION */}
@@ -2235,7 +2121,7 @@ export default function CouncillorDashboard({
               )}
 
                {/* Resolution Notes */}
-              {selectedComplaint.resolutionNotes && (
+              {currentUser.role !== "councillor" && selectedComplaint.resolutionNotes && (
                 <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-xl space-y-2">
                   <h4 className="font-bold text-emerald-800 uppercase text-[10px] font-mono tracking-wider">Technical Resolution Notes</h4>
                   <p className="text-emerald-700 leading-relaxed font-semibold">
@@ -2289,7 +2175,7 @@ export default function CouncillorDashboard({
                       placeholder="Input remarks regarding the quality of the repair. (e.g. Site cleaned properly, pressure normal, community satisfied...)"
                       value={verificationComments}
                       onChange={(e) => setVerificationComments(e.target.value)}
-                      className="w-full bg-white border border-amber-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green text-slate-800 font-semibold"
+                      className="w-full bg-white border border-amber-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green text-slate-800 font-semibold text-base"
                     ></textarea>
                   </div>
 
@@ -2364,7 +2250,7 @@ export default function CouncillorDashboard({
                     placeholder="Enter message for dispatch operators..."
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue focus:bg-white transition-all font-semibold"
+                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue focus:bg-white transition-all font-semibold text-base"
                   />
                   <button
                     id="submit-cllr-comment"

@@ -1,10 +1,279 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Thulamela Municipality CRM utilizes client-side simulated role-based authentication.
-    // For cloud synchronization to function without Firebase Auth, we allow read and write access for all collections.
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return getUserData().role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (getUserRole() == 'super_admin' || getUserRole() == 'municipal_admin');
+    }
+
+    function isCouncillor() {
+      return isSignedIn() && getUserRole() == 'councillor';
+    }
+
+    function isTechnician() {
+      return isSignedIn() && getUserRole() == 'technician';
+    }
+
+    function isValidUser(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.name is string && data.name.size() <= 128
+          && data.email is string && data.email.size() <= 128
+          && data.phone is string && data.phone.size() <= 64
+          && data.username is string && data.username.size() <= 128
+          && data.role is string && (data.role == 'super_admin' || data.role == 'municipal_admin' || data.role == 'councillor' || data.role == 'technician')
+          && data.status is string && (data.status == 'active' || data.status == 'inactive');
+    }
+
+    function isValidComplaint(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 2000
+          && data.category is string && data.category.size() <= 128
+          && data.wardNumber is int
+          && data.reporterId is string && data.reporterId.size() <= 128
+          && data.status is string && data.status.size() <= 64
+          && data.priority is string && (data.priority == 'Low' || data.priority == 'Medium' || data.priority == 'High' || data.priority == 'Critical' || data.priority == 'Emergency');
+    }
+
+    function isValidNotification(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.userId is string && data.userId.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.message is string && data.message.size() <= 1000
+          && data.type is string && (data.type == 'info' || data.type == 'success' || data.type == 'warning' || data.type == 'alert')
+          && data.isRead is bool;
+    }
+
+    function isValidAuditLog(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.userId is string && data.userId.size() <= 128
+          && data.userName is string && data.userName.size() <= 128
+          && data.userRole is string
+          && data.action is string && data.action.size() <= 200
+          && data.details is string && data.details.size() <= 2000;
+    }
+
+    function isValidChatMessage(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.roomId is string && data.roomId.size() <= 128
+          && data.senderId is string && data.senderId.size() <= 128
+          && data.senderName is string && data.senderName.size() <= 128
+          && data.senderRole is string
+          && data.message is string && data.message.size() <= 4000;
+    }
+
+    function isValidChatRoom(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.name is string && data.name.size() <= 200
+          && data.type is string && (data.type == 'direct' || data.type == 'group' || data.type == 'broadcast')
+          && data.participants is list;
+    }
+
+    function isValidCalendarEvent(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 2000
+          && data.type is string
+          && data.startDate is string
+          && data.endDate is string
+          && data.location is string && data.location.size() <= 500;
+    }
+
+    function isValidTask(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 2000
+          && data.assignedUserId is string && data.assignedUserId.size() <= 128
+          && data.assignedUserName is string && data.assignedUserName.size() <= 128
+          && data.departmentId is string
+          && data.priority is string
+          && data.status is string
+          && data.progressPercentage is int;
+    }
+
+    function isValidDocument(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.category is string
+          && data.fileUrl is string && data.fileUrl.size() <= 1000
+          && data.fileType is string
+          && data.fileSize is string;
+    }
+
+    function isValidDigitalForm(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.type is string
+          && data.title is string && data.title.size() <= 200
+          && data.submittedBy is string && data.submittedBy.size() <= 128
+          && data.submittedByName is string && data.submittedByName.size() <= 128
+          && data.isDraft is bool;
+    }
+
+    function isValidServiceNotice(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.category is string && (data.category in ['Water', 'Electricity', 'Roads', 'Sewer', 'Waste', 'StreetLights', 'StormWater', 'Parks', 'Housing', 'General'])
+          && data.status is string && (data.status == 'Operational' || data.status == 'Maintenance' || data.status == 'Emergency' || data.status == 'Scheduled')
+          && data.description is string && data.description.size() <= 2000
+          && data.dateReported is string
+          && data.priority is string && (data.priority == 'Low' || data.priority == 'Medium' || data.priority == 'High')
+          && data.department is string && data.department.size() <= 128
+          && data.departmentManager is string && data.departmentManager.size() <= 128
+          && data.emergencyNumber is string && data.emergencyNumber.size() <= 20
+          && data.email is string && data.email.size() <= 128
+          && data.officeHours is string && data.officeHours.size() <= 128
+          && data.referenceNumber is string && data.referenceNumber.size() <= 128
+          && data.progress is int
+          && data.timeline is list && data.timeline.size() <= 50;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId &&
+          (incoming().role == 'councillor' || incoming().role == 'technician') &&
+          incoming().status == 'active'
+        )
+      );
+
+      allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId &&
+          incoming().role == existing().role &&
+          incoming().status == existing().status &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['profilePicture', 'physicalAddress', 'phone', 'email'])
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /wards/{wardId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /departments/{departmentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /technicians/{technicianId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /complaints/{complaintId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming());
+      allow update: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming()) && (
+        isAdmin() || 
+        (
+          isCouncillor() &&
+          existing().reporterId == request.auth.uid &&
+          incoming().reporterId == existing().reporterId
+        ) ||
+        (isTechnician() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolutionNotes', 'verificationComments', 'dateUpdated', 'logs', 'comments']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.userId == 'all');
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming());
+      allow update: if isSignedIn() && isValidId(notificationId) && resource.data.userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+      allow delete: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && isValidId(logId) && isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+
+    match /chatRooms/{roomId} {
+      allow read: if isSignedIn() && resource.data.participants.hasAny([request.auth.uid]);
+      allow create: if isSignedIn() && isValidId(roomId) && isValidChatRoom(incoming());
+      allow update: if isSignedIn() && isValidId(roomId) && existing().participants.hasAny([request.auth.uid]) && isValidChatRoom(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /chatMessages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(messageId) && isValidChatMessage(incoming());
+      allow update: if isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'readBy']);
+      allow delete: if isAdmin();
+    }
+
+    match /calendarEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming());
+      allow update: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming()) && (isAdmin() || isCouncillor() || isTechnician());
+      allow delete: if isAdmin();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(taskId) && isValidTask(incoming());
+      allow update: if isSignedIn() && isValidId(taskId) && isValidTask(incoming()) && (
+        isAdmin() || (isTechnician() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'progressPercentage', 'comments']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /documents/{documentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(documentId) && isValidDocument(incoming());
+      allow update: if isSignedIn() && isValidId(documentId) && isValidDocument(incoming()) && (isAdmin() || isCouncillor() || isTechnician());
+      allow delete: if isAdmin();
+    }
+
+    match /digitalForms/{formId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(formId) && isValidDigitalForm(incoming());
+      allow update: if isSignedIn() && isValidId(formId) && isValidDigitalForm(incoming()) && (isAdmin() || incoming().submittedBy == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /serviceNotices/{noticeId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

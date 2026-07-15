@@ -104,7 +104,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
                   placeholder="e.g. superadmin"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-gov-yellow focus:bg-slate-800/50 transition-all font-semibold font-mono"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-4 text-slate-100 focus:outline-none focus:border-gov-yellow focus:bg-slate-800/50 transition-all font-semibold font-mono text-base"
                 />
                 <UserIcon className="absolute left-3.5 top-3.5 text-slate-400" size={14} />
               </div>
@@ -119,7 +119,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-slate-100 focus:outline-none focus:border-gov-yellow focus:bg-slate-800/50 transition-all font-mono font-bold"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg py-2.5 pl-10 pr-10 text-slate-100 focus:outline-none focus:border-gov-yellow focus:bg-slate-800/50 transition-all font-mono font-bold text-base"
                 />
                 <Lock className="absolute left-3.5 top-3.5 text-slate-400" size={14} />
                 <button

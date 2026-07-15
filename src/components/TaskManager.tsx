@@ -260,7 +260,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
               placeholder="e.g. Conduct pressure pipe diagnostics"
               value={taskTitle}
               onChange={(e) => setTaskTitle(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
               required
             />
           </div>
@@ -270,7 +270,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
             <select
               value={taskAssignedId}
               onChange={(e) => setTaskAssignedId(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
               required
             >
               <option value="">-- Choose Staff Allocation --</option>
@@ -285,7 +285,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
             <select
               value={taskDeptId}
               onChange={(e) => setTaskDeptId(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
             >
               {departments.map(d => (
                 <option key={d.id} value={d.id}>{d.name}</option>
@@ -298,7 +298,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
             <select
               value={taskPriority}
               onChange={(e) => setTaskPriority(e.target.value as Task["priority"])}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
             >
               <option value="Low">Low Priority</option>
               <option value="Medium">Medium Priority</option>
@@ -313,7 +313,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
               type="date"
               value={taskDueDate}
               onChange={(e) => setTaskDueDate(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none font-semibold text-slate-700"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none font-semibold text-slate-700 text-base"
               required
             />
           </div>
@@ -324,7 +324,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
               placeholder="Detail required diagnostic tests, pipe configurations, materials, safety hazards..."
               value={taskDesc}
               onChange={(e) => setTaskDesc(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 h-16 focus:outline-none"
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 h-16 focus:outline-none text-base"
             />
           </div>
 
@@ -357,7 +357,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none font-bold text-slate-700"
+          className="bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none font-bold text-slate-700 text-base"
         >
           <option value="All">All Statuses</option>
           <option value="Pending">Pending</option>
@@ -369,7 +369,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
         <select
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none font-bold text-slate-700"
+          className="bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none font-bold text-slate-700 text-base"
         >
           <option value="All">All Priorities</option>
           <option value="Low">Low</option>
@@ -382,7 +382,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
         <select
           value={assignedFilter}
           onChange={(e) => setAssignedFilter(e.target.value)}
-          className="bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none font-bold text-slate-700 text-gov-blue"
+          className="bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none font-bold text-slate-700 text-gov-blue text-base"
         >
           <option value="All">All Technicians</option>
           <option value="me">Assigned To Me</option>
@@ -496,7 +496,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
                       step="5"
                       value={tempProgress}
                       onChange={(e) => setTempProgress(Number(e.target.value))}
-                      className="w-full accent-gov-green"
+                      className="w-full accent-gov-green text-base"
                     />
 
                     {/* Quick status adjust buttons */}
@@ -544,7 +544,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
                         placeholder="Add engineering diagnostic or status updates..."
                         value={newCommentText}
                         onChange={(e) => setNewCommentText(e.target.value)}
-                        className="flex-grow bg-white border border-slate-200 rounded-lg p-2 text-[11px] focus:outline-none"
+                        className="flex-grow bg-white border border-slate-200 rounded-lg p-2 text-[11px] focus:outline-none text-base"
                       />
                       <button
                         onClick={() => handleAddTaskComment(task.id)}

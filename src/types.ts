@@ -20,6 +20,8 @@ export interface User {
   profilePicture?: string;
   status: "active" | "inactive";
   dateCreated: string;
+  tempPassword?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface Ward {
@@ -135,6 +137,18 @@ export interface Complaint {
   escalationLevel?: 1 | 2 | 3;
   escalationReason?: string;
   escalationDuration?: string;
+}
+
+export interface AccountRequest {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  wardNumber: number;
+  politicalPosition: string;
+  saIdNumber: string;
+  status: "pending" | "approved" | "rejected";
+  dateRequested: string;
 }
 
 export interface Notification {
@@ -255,5 +269,36 @@ export interface DigitalForm {
   submittedByName: string;
   date: string;
   isDraft: boolean;
+}
+
+export interface ServiceNotice {
+  id: string;
+  title: string;
+  category: "Water" | "Electricity" | "Roads" | "Sewer" | "Waste" | "StreetLights" | "StormWater" | "Parks" | "Housing" | "General";
+  status: "Scheduled" | "In Progress" | "Delayed" | "Completed" | "Emergency" | "Operational" | "Maintenance";
+  description: string;
+  cause: string;
+  dateReported: string;
+  estimatedCompletion: string;
+  priority: "Low" | "Medium" | "High" | "Critical";
+  affectedWards: number[];
+  affectedArea: string;
+  gpsCoordinates?: string; // Format: "lat,lng"
+  department: string;
+  departmentManager: string;
+  emergencyNumber: string;
+  email: string;
+  officeHours: string;
+  assignedTechnician?: string;
+  referenceNumber: string;
+  progress: number;
+  timeline: { time: string; description: string }[];
+  streetLocation?: string;
+  estimatedDuration?: string;
+  servicesAffected?: string[];
+  householdsAffected?: number;
+  lastUpdated?: string;
+  photos?: string[];
+  videos?: string[];
 }
 

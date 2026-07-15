@@ -62,7 +62,7 @@ export default function PublicFooter({ onNavigate }: PublicFooterProps) {
           </p>
           <div className="pt-2">
             <span className="inline-block bg-gov-green/10 text-gov-green text-[10px] font-bold px-2 py-1 rounded border border-gov-green/20">
-              Batho Pele Principles • People First
+              We Serve With Dedication
             </span>
           </div>
         </div>

@@ -9,7 +9,21 @@ import {
 import { getStorage } from "firebase/storage";
 
 // Vite allows importing JSON files directly
-import config from "../firebase-applet-config.json";
+import configData from "../firebase-applet-config.json";
+
+interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+  oAuthClientId?: string;
+  firestoreDatabaseId?: string;
+}
+
+const config = configData as FirebaseConfig;
 
 const firebaseConfig = {
   apiKey: config.apiKey,

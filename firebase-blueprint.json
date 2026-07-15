@@ -1,0 +1,377 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System users of Thulamela Municipality CRM",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "physicalAddress": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "municipal_admin", "councillor", "technician"] },
+        "employeeNumber": { "type": "string" },
+        "saIdNumber": { "type": "string" },
+        "wardNumber": { "type": "number" },
+        "wardName": { "type": "string" },
+        "politicalPosition": { "type": "string" },
+        "profilePicture": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "dateCreated": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "phone", "username", "role", "status", "dateCreated"]
+    },
+    "Ward": {
+      "title": "Ward",
+      "description": "Municipal Ward Information",
+      "type": "object",
+      "properties": {
+        "wardNumber": { "type": "number" },
+        "wardName": { "type": "string" },
+        "assignedCouncillorId": { "type": "string" },
+        "councillorName": { "type": "string" },
+        "contactDetails": { "type": "string" },
+        "performancePercentage": { "type": "number" }
+      },
+      "required": ["wardNumber", "wardName"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Municipal Service Departments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "managerName": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "description": { "type": "string" },
+        "iconName": { "type": "string" }
+      },
+      "required": ["id", "name", "code", "managerName", "contactEmail", "contactPhone"]
+    },
+    "Technician": {
+      "title": "Technician",
+      "description": "Municipal Field Technicians",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "departmentName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "busy", "on_leave"] },
+        "activeTasks": { "type": "number" },
+        "completedTasks": { "type": "number" }
+      },
+      "required": ["id", "name", "departmentId", "departmentName", "phone", "email", "status"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Lodged Municipal Complaints",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "wardNumber": { "type": "number" },
+        "wardName": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "status": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "departmentName": { "type": "string" },
+        "assignedTechnicianId": { "type": "string" },
+        "assignedTechnicianName": { "type": "string" },
+        "priority": { "type": "string" },
+        "dateCreated": { "type": "string" },
+        "dateUpdated": { "type": "string" },
+        "logs": { "type": "array" },
+        "comments": { "type": "array" },
+        "resolutionNotes": { "type": "string" },
+        "referencePhoto": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "streetAddress": { "type": "string" },
+        "village": { "type": "string" },
+        "area": { "type": "string" },
+        "gpsCoordinates": { "type": "string" },
+        "landmark": { "type": "string" },
+        "preferredContactMethod": { "type": "string", "enum": ["SMS", "Email", "Call", "WhatsApp"] },
+        "supportingImages": { "type": "array" },
+        "supportingDocuments": { "type": "array" },
+        "voiceNote": { "type": "string" },
+        "video": { "type": "string" },
+        "citizenName": { "type": "string" },
+        "citizenContactNumber": { "type": "string" },
+        "affectedResidents": { "type": "number" },
+        "emergencyLevel": { "type": "string", "enum": ["Low", "Medium", "Severe", "Disastrous"] },
+        "isDraft": { "type": "boolean" },
+        "rating": { "type": "number" },
+        "verificationComments": { "type": "string" },
+        "internalNotes": { "type": "string" },
+        "escalated": { "type": "boolean" },
+        "escalationLevel": { "type": "number" },
+        "escalationReason": { "type": "string" },
+        "escalationDuration": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "category", "wardNumber", "wardName", "reporterId", "reporterName", "status", "priority", "dateCreated", "dateUpdated"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app and broadcast notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["info", "success", "warning", "alert"] },
+        "isRead": { "type": "boolean" },
+        "timestamp": { "type": "string" },
+        "complaintId": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "message", "type", "isRead", "timestamp"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Municipal Announcements",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string", "enum": ["announcement", "news", "event"] },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "author": { "type": "string" },
+        "isEmergency": { "type": "boolean" }
+      },
+      "required": ["id", "title", "content", "type", "date", "category", "author"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Platform activity logs for audit trails",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userRole": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "userId", "userName", "userRole", "action", "details"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Messages inside Chat Rooms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "attachments": { "type": "array" },
+        "readBy": { "type": "array" },
+        "reactions": { "type": "array" }
+      },
+      "required": ["id", "roomId", "senderId", "senderName", "senderRole", "message", "timestamp"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "Municipal Chat Rooms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["direct", "group", "broadcast"] },
+        "participants": { "type": "array" },
+        "departmentId": { "type": "string" },
+        "pinnedBy": { "type": "array" },
+        "archivedBy": { "type": "array" },
+        "lastMessage": { "type": "string" },
+        "lastMessageTime": { "type": "string" }
+      },
+      "required": ["id", "name", "type", "participants"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Municipal Calendar Scheduler Events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["inspection", "technician_visit", "community_meeting", "event", "deadline", "maintenance"] },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "location": { "type": "string" },
+        "assignedUserId": { "type": "string" },
+        "wardNumber": { "type": "number" },
+        "complaintId": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "type", "startDate", "endDate", "location"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Work orders dispatched to technicians",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedUserId": { "type": "string" },
+        "assignedUserName": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Completed", "Cancelled"] },
+        "startDate": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "completionDate": { "type": "string" },
+        "progressPercentage": { "type": "number" },
+        "attachments": { "type": "array" },
+        "comments": { "type": "array" }
+      },
+      "required": ["id", "title", "description", "assignedUserId", "assignedUserName", "departmentId", "priority", "status", "startDate", "dueDate", "progressPercentage"]
+    },
+    "MunicipalDocument": {
+      "title": "MunicipalDocument",
+      "description": "Documents in municipal repository",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["complaint_docs", "reports", "policies", "minutes", "contracts", "inspections", "certificates", "training"] },
+        "fileUrl": { "type": "string" },
+        "fileType": { "type": "string" },
+        "fileSize": { "type": "string" },
+        "version": { "type": "number" },
+        "uploadedBy": { "type": "string" },
+        "uploadedByName": { "type": "string" },
+        "uploadedDate": { "type": "string" },
+        "history": { "type": "array" }
+      },
+      "required": ["id", "title", "category", "fileUrl", "fileType", "fileSize", "version", "uploadedBy", "uploadedByName", "uploadedDate"]
+    },
+    "DigitalForm": {
+      "title": "DigitalForm",
+      "description": "Signed site forms and inspections",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["inspection", "site_visit", "completion", "verification", "checklist", "incident", "emergency"] },
+        "title": { "type": "string" },
+        "formData": { "type": "object" },
+        "attachments": { "type": "array" },
+        "signature": { "type": "string" },
+        "gpsCoordinates": { "type": "string" },
+        "submittedBy": { "type": "string" },
+        "submittedByName": { "type": "string" },
+        "date": { "type": "string" },
+        "isDraft": { "type": "boolean" }
+      },
+      "required": ["id", "type", "title", "submittedBy", "submittedByName", "date", "isDraft"]
+    },
+    "ServiceNotice": {
+      "title": "ServiceNotice",
+      "description": "Municipal service notices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["Water", "Electricity", "Roads", "Sewer", "Waste", "StreetLights", "StormWater", "Parks", "Housing", "General"] },
+        "status": { "type": "string", "enum": ["Operational", "Maintenance", "Emergency", "Scheduled"] },
+        "description": { "type": "string" },
+        "cause": { "type": "string" },
+        "dateReported": { "type": "string" },
+        "estimatedCompletion": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Low", "Medium", "High"] },
+        "affectedWards": { "type": "array" },
+        "affectedArea": { "type": "string" },
+        "gpsCoordinates": { "type": "string" },
+        "department": { "type": "string" },
+        "departmentManager": { "type": "string" },
+        "emergencyNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "officeHours": { "type": "string" },
+        "assignedTechnician": { "type": "string" },
+        "referenceNumber": { "type": "string" },
+        "progress": { "type": "number" },
+        "timeline": { "type": "array" }
+      },
+      "required": ["id", "title", "category", "status", "description", "dateReported", "priority", "department", "departmentManager", "emergencyNumber", "email", "officeHours", "referenceNumber", "progress", "timeline"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users of the CRM system"
+    },
+    "/wards/{wardId}": {
+      "schema": { "$ref": "#/entities/Ward" },
+      "description": "Wards definition"
+    },
+    "/departments/{departmentId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "Municipal departments"
+    },
+    "/technicians/{technicianId}": {
+      "schema": { "$ref": "#/entities/Technician" },
+      "description": "Active technicians"
+    },
+    "/complaints/{complaintId}": {
+      "schema": { "$ref": "#/entities/Complaint" },
+      "description": "Complaint registers"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Broadcast notifications"
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "News and emergency announcements"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit trails"
+    },
+    "/chatRooms/{roomId}": {
+      "schema": { "$ref": "#/entities/ChatRoom" },
+      "description": "Collaboration rooms"
+    },
+    "/chatMessages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Chat messages"
+    },
+    "/calendarEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/CalendarEvent" },
+      "description": "Task and inspection calendar events"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Dispatched technician tasks"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/MunicipalDocument" },
+      "description": "Municipal document directory"
+    },
+    "/digitalForms/{formId}": {
+      "schema": { "$ref": "#/entities/DigitalForm" },
+      "description": "Digital forms submitted"
+    },
+    "/serviceNotices/{noticeId}": {
+      "schema": { "$ref": "#/entities/ServiceNotice" },
+      "description": "Municipal service notices"
+    }
+  }
+}
