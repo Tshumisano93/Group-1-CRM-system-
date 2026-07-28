@@ -116,7 +116,7 @@ export default function CouncillorDashboard({
   const [profEmail, setProfEmail] = useState(currentUser.email);
   const [profPhone, setProfPhone] = useState(currentUser.phone);
   const [profAddress, setProfAddress] = useState(currentUser.physicalAddress);
-  const [profPassword, setProfPassword] = useState("password");
+  const [profPassword, setProfPassword] = useState("");
   const [profTwoFactor, setProfTwoFactor] = useState(false);
 
   const departments = getDepartments();
@@ -201,9 +201,14 @@ export default function CouncillorDashboard({
   const closedCount = complaints.filter(c => c.status === "Closed").length;
 
   const uploadFile = async (file: File) => {
-    const storageRef = ref(storage, `complaints/${Date.now()}_${file.name}`);
+    if (!storage) {
+      throw new Error("Firebase Storage service is not available.");
+    }
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storageRef = ref(storage, `complaints/${Date.now()}_${cleanFileName}`);
     await uploadBytes(storageRef, file);
-    return { type: file.type, url: await getDownloadURL(storageRef) };
+    const downloadUrl = await getDownloadURL(storageRef);
+    return { type: file.type, url: downloadUrl, name: file.name };
   };
 
   const handleLodgeComplaint = async (e: React.FormEvent, isDraftFlag: boolean = false) => {
@@ -213,9 +218,40 @@ export default function CouncillorDashboard({
       return;
     }
 
+    // Validate attachment size and type before processing
+    const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB limit per file
+    for (const file of attachments) {
+      if (file.size > MAX_FILE_SIZE) {
+        onAddToast("File Size Exceeded", `File "${file.name}" exceeds the 15MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB).`, "warning");
+        return;
+      }
+      const isTypeValid = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'].includes(file.type) || file.type.startsWith('image/') || file.type.startsWith('video/');
+      if (!isTypeValid) {
+        onAddToast("Invalid File Type", `File "${file.name}" is an unsupported file format.`, "warning");
+        return;
+      }
+    }
+
     setSubmitting(true);
 
-    setTimeout(() => {
+    try {
+      const uploadedMedia: { type: string; url: string; name: string }[] = [];
+
+      if (attachments.length > 0) {
+        onAddToast("Uploading Media", `Uploading ${attachments.length} attachment(s) to Firebase Storage...`, "info");
+        for (const file of attachments) {
+          const mediaObj = await uploadFile(file);
+          uploadedMedia.push(mediaObj);
+        }
+      }
+
+      const imageUploads = uploadedMedia.filter(m => m.type.startsWith('image/'));
+      const videoUploads = uploadedMedia.filter(m => m.type.startsWith('video/'));
+
+      const referencePhotoUrl = imageUploads.length > 0 ? imageUploads[0].url : undefined;
+      const supportingImageUrls = imageUploads.map(m => m.url);
+      const videoUrl = videoUploads.length > 0 ? videoUploads[0].url : undefined;
+
       const allComplaints = getComplaints();
       const formatIndex = String(allComplaints.length + 1).padStart(6, '0');
       const newId = `TM-2026-${formatIndex}`;
@@ -238,7 +274,7 @@ export default function CouncillorDashboard({
         priority: compPriority,
         dateCreated: new Date().toISOString(),
         dateUpdated: new Date().toISOString(),
-        referencePhoto: attachments.filter(f => f.type.startsWith('image/'))[0] ? URL.createObjectURL(attachments.filter(f => f.type.startsWith('image/'))[0]) : undefined,
+        referencePhoto: referencePhotoUrl,
         
         streetAddress: streetAddress.trim(),
         village: village.trim(),
@@ -246,8 +282,8 @@ export default function CouncillorDashboard({
         gpsCoordinates: gpsCoordinates.trim() || "-22.956, 30.481",
         landmark: landmark.trim(),
         preferredContactMethod,
-        supportingImages: attachments.filter(f => f.type.startsWith('image/')).map(f => URL.createObjectURL(f)),
-        video: attachments.filter(f => f.type.startsWith('video/')).map(f => URL.createObjectURL(f))[0] || undefined,
+        supportingImages: supportingImageUrls,
+        video: videoUrl,
         citizenName: citizenName.trim() || undefined,
         citizenContactNumber: citizenContactNumber.trim() || undefined,
         affectedResidents,
@@ -309,8 +345,6 @@ export default function CouncillorDashboard({
       setAffectedResidents(50);
       setEmergencyLevel("Medium");
       setAttachments([]);
-      
-      setSubmitting(false);
 
       if (isDraftFlag) {
         onAddToast(
@@ -328,7 +362,12 @@ export default function CouncillorDashboard({
 
       loadCrmData();
       setActiveTab("complaints");
-    }, 1200);
+    } catch (err: any) {
+      console.error("Error lodging complaint with attachments:", err);
+      onAddToast("Media Upload Error", `Failed to upload attachments or save complaint docket: ${err?.message || "Storage upload failure"}`, "error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleAddComment = (complaintId: string) => {

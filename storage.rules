@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidFileSize() {
+      return request.resource.size <= 15 * 1024 * 1024; // 15MB limit
+    }
+
+    function isValidMediaType() {
+      return request.resource.contentType.matches('image/.*')
+          || request.resource.contentType.matches('video/.*')
+          || request.resource.contentType == 'application/pdf';
+    }
+
+    // Complaint media attachments directory (path: complaints/{timestamp}_{filename})
+    match /complaints/{fileName} {
+      // Allow authenticated municipal CRM users (councillors, technicians, admins) to view complaint media
+      allow read: if isAuthenticated();
+
+      // Allow authenticated CRM users to upload complaint attachments (images, videos, PDFs up to 15MB)
+      allow create: if isAuthenticated() 
+                    && isValidFileSize() 
+                    && isValidMediaType();
+
+      // Allow authenticated CRM users to update or delete complaint files
+      allow update, delete: if isAuthenticated();
+    }
+
+    // Default rule: block all unauthenticated or unhandled storage paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

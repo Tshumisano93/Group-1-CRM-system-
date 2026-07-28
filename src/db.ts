@@ -657,3 +657,152 @@ export function saveServiceNotices(notices: ServiceNotice[]) {
     });
   }
 }
+
+export function migrateUserId(oldId: string, newId: string) {
+  console.log(`Migrating user data from old ID ${oldId} to new Firebase Auth UID ${newId}`);
+  
+  // 1. Users
+  const users = getUsers();
+  let userUpdated = false;
+  const updatedUsers = users.map(u => {
+    if (u.id === oldId) {
+      userUpdated = true;
+      return { ...u, id: newId };
+    }
+    return u;
+  });
+  if (userUpdated) {
+    localStorage.setItem("thulamela_crm_users", JSON.stringify(updatedUsers));
+    // Sync to Firestore under new ID
+    const targetUser = updatedUsers.find(u => u.id === newId);
+    if (targetUser && isFirebaseEnabled && db) {
+      setDoc(doc(db, "users", newId), targetUser).catch(err => console.warn(err));
+    }
+  }
+
+  // 2. Complaints
+  const complaints = getComplaints();
+  let complaintsUpdated = false;
+  const updatedComplaints = complaints.map(c => {
+    let changed = false;
+    let repId = c.reporterId;
+    let techId = c.assignedTechnicianId;
+    if (c.reporterId === oldId) {
+      repId = newId;
+      changed = true;
+    }
+    if (c.assignedTechnicianId === oldId) {
+      techId = newId;
+      changed = true;
+    }
+    if (changed) {
+      complaintsUpdated = true;
+      return { ...c, reporterId: repId, assignedTechnicianId: techId };
+    }
+    return c;
+  });
+  if (complaintsUpdated) {
+    saveComplaints(updatedComplaints);
+  }
+
+  // 3. Notifications
+  const notifications = getNotifications();
+  let notificationsUpdated = false;
+  const updatedNotifications = notifications.map(n => {
+    if (n.userId === oldId) {
+      notificationsUpdated = true;
+      return { ...n, userId: newId };
+    }
+    return n;
+  });
+  if (notificationsUpdated) {
+    saveNotifications(updatedNotifications);
+  }
+
+  // 4. Tasks
+  const tasks = getTasks();
+  let tasksUpdated = false;
+  const updatedTasks = tasks.map(t => {
+    if (t.assignedUserId === oldId) {
+      tasksUpdated = true;
+      return { ...t, assignedUserId: newId };
+    }
+    return t;
+  });
+  if (tasksUpdated) {
+    saveTasks(updatedTasks);
+  }
+
+  // 5. Wards
+  const wards = getWards();
+  let wardsUpdated = false;
+  const updatedWards = wards.map(w => {
+    if (w.assignedCouncillorId === oldId) {
+      wardsUpdated = true;
+      return { ...w, assignedCouncillorId: newId };
+    }
+    return w;
+  });
+  if (wardsUpdated) {
+    saveWards(updatedWards);
+  }
+
+  // 6. Chat Rooms
+  const chatRooms = getChatRooms();
+  let roomsUpdated = false;
+  const updatedChatRooms = chatRooms.map(r => {
+    if (r.participants.includes(oldId)) {
+      roomsUpdated = true;
+      return {
+        ...r,
+        participants: r.participants.map(p => p === oldId ? newId : p)
+      };
+    }
+    return r;
+  });
+  if (roomsUpdated) {
+    saveChatRooms(updatedChatRooms);
+  }
+
+  // 7. Chat Messages
+  const chatMessages = getChatMessages();
+  let messagesUpdated = false;
+  const updatedChatMessages = chatMessages.map(m => {
+    if (m.senderId === oldId) {
+      messagesUpdated = true;
+      return { ...m, senderId: newId };
+    }
+    return m;
+  });
+  if (messagesUpdated) {
+    saveChatMessages(updatedChatMessages);
+  }
+
+  // 8. Calendar Events
+  const events = getCalendarEvents();
+  let eventsUpdated = false;
+  const updatedEvents = events.map(e => {
+    if (e.assignedUserId === oldId) {
+      eventsUpdated = true;
+      return { ...e, assignedUserId: newId };
+    }
+    return e;
+  });
+  if (eventsUpdated) {
+    saveCalendarEvents(updatedEvents);
+  }
+
+  // 9. Digital Forms
+  const forms = getDigitalForms();
+  let formsUpdated = false;
+  const updatedForms = forms.map(f => {
+    if (f.submittedBy === oldId) {
+      formsUpdated = true;
+      return { ...f, submittedBy: newId };
+    }
+    return f;
+  });
+  if (formsUpdated) {
+    saveDigitalForms(updatedForms);
+  }
+}

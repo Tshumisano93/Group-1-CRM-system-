@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Lock, User as UserIcon, ShieldAlert, KeyRound, Eye, EyeOff, Terminal } from "lucide-react";
 import { getUsers, setCurrentUser, addAuditLog } from "../db";
 import { User } from "../types";
+import { isFirebaseEnabled, auth } from "../firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 interface AdminLoginProps {
   onLoginSuccess: (user: User) => void;
@@ -15,7 +17,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
       onAddToast("Login Failed", "Username and password are required.", "warning");
@@ -24,60 +26,117 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
 
     setLoading(true);
 
-    setTimeout(() => {
-      const users = getUsers();
-      const matchedUser = users.find(
-        (u) => u.username.toLowerCase() === username.toLowerCase().trim()
-      );
+    const users = Array.isArray(getUsers()) ? getUsers() : [];
+    const enteredVal = username.toLowerCase().trim();
 
-      if (!matchedUser) {
+    const isLegacyProfile = (u: User) =>
+      u.id.startsWith("ADMIN-") ||
+      u.id.startsWith("COUN-") ||
+      u.id.startsWith("TECH-");
+
+    let matchedUser: User | undefined = undefined;
+
+    // 1. Check for exact email matches
+    const emailMatches = users.filter((u) => u.email.toLowerCase() === enteredVal);
+    
+    // 2. Check for username matches on real profiles
+    const realUsernameMatches = users.filter(
+      (u) => u.username.toLowerCase() === enteredVal && !isLegacyProfile(u)
+    );
+
+    // 3. Check for username matches on legacy profiles
+    const legacyUsernameMatches = users.filter(
+      (u) => u.username.toLowerCase() === enteredVal && isLegacyProfile(u)
+    );
+
+    if (emailMatches.length > 0) {
+      const realEmailMatches = emailMatches.filter((u) => !isLegacyProfile(u));
+      if (realEmailMatches.length > 0) {
+        if (realEmailMatches.length > 1) {
+          setLoading(false);
+          onAddToast("Authentication Failed", "Multiple real profiles found matching this email. Access is ambiguous.", "error");
+          return;
+        }
+        matchedUser = realEmailMatches[0];
+      } else {
+        if (emailMatches.length > 1) {
+          setLoading(false);
+          onAddToast("Authentication Failed", "Multiple profiles found matching this email. Access is ambiguous.", "error");
+          return;
+        }
+        matchedUser = emailMatches[0];
+      }
+    } else if (realUsernameMatches.length > 0) {
+      if (realUsernameMatches.length > 1) {
         setLoading(false);
-        onAddToast("Authentication Failed", "Username not registered in the administrative database.", "error");
+        onAddToast("Authentication Failed", "Multiple real profiles found matching this username. Access is ambiguous.", "error");
         return;
       }
-
-      if (password !== "password") {
+      matchedUser = realUsernameMatches[0];
+    } else if (legacyUsernameMatches.length > 0) {
+      if (legacyUsernameMatches.length > 1) {
         setLoading(false);
-        onAddToast("Authentication Failed", "Incorrect password. Use 'password' for testing.", "error");
+        onAddToast("Authentication Failed", "Multiple legacy profiles found matching this username. Access is ambiguous.", "error");
         return;
       }
+      matchedUser = legacyUsernameMatches[0];
+    }
 
-      if (matchedUser.role === "councillor") {
-        setLoading(false);
-        onAddToast("Access Denied", "Councillor accounts must use the main Councillor Login portal.", "warning");
-        return;
-      }
-
-      if (matchedUser.status !== "active") {
-        setLoading(false);
-        onAddToast("Account Suspended", "This staff account is currently deactivated. Contact Vhembe IT support.", "error");
-        return;
-      }
-
-      // Success
-      setCurrentUser(matchedUser);
-      addAuditLog(
-        matchedUser.id,
-        matchedUser.name,
-        matchedUser.role,
-        "Admin Login",
-        `Administrative user logged in successfully. Role: ${matchedUser.role}.`
-      );
-
+    if (!matchedUser) {
       setLoading(false);
-      onLoginSuccess(matchedUser);
-      onAddToast(
-        "Secure Session Established",
-        `Welcome, ${matchedUser.name}! Opening Executive Dashboard...`,
-        "success"
-      );
-    }, 1000);
+      onAddToast("Authentication Failed", "Username not registered in the administrative database.", "error");
+      return;
+    }
+
+    if (matchedUser.role === "councillor") {
+      setLoading(false);
+      onAddToast("Access Denied", "Councillor accounts must use the main Councillor Login portal.", "warning");
+      return;
+    }
+
+    if (matchedUser.status !== "active") {
+      setLoading(false);
+      onAddToast("Account Suspended", "This staff account is currently deactivated. Contact Vhembe IT support.", "error");
+      return;
+    }
+
+    if (isFirebaseEnabled && auth) {
+      try {
+        await signInWithEmailAndPassword(auth, matchedUser.email, password);
+      } catch (err: any) {
+        setLoading(false);
+        onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
+        return;
+      }
+    } else {
+      setLoading(false);
+      onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
+      return;
+    }
+
+    // Success
+    setCurrentUser(matchedUser);
+    addAuditLog(
+      matchedUser.id,
+      matchedUser.name,
+      matchedUser.role,
+      "Admin Login",
+      `Administrative user logged in successfully. Role: ${matchedUser.role}.`
+    );
+
+    setLoading(false);
+    onLoginSuccess(matchedUser);
+    onAddToast(
+      "Secure Session Established",
+      `Welcome, ${matchedUser.name}! Opening Executive Dashboard...`,
+      "success"
+    );
   };
 
   const handleAutofill = (usernameVal: string) => {
     setUsername(usernameVal);
-    setPassword("password");
-    onAddToast("Credentials Preloaded", `Preloaded ${usernameVal}. Click 'Establish Session' to login.`, "info");
+    setPassword("");
+    onAddToast("Credentials Preloaded", `Preloaded ${usernameVal}. Please enter the correct account password to login.`, "info");
   };
 
   return (
@@ -209,7 +268,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
                   <span className="bg-amber-100 text-slate-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">TECH</span>
                 </button>
               </div>
-              <div className="text-[10px] text-slate-500 text-center font-mono">ALL PASSWORDS: "password"</div>
+              <div className="text-[10px] text-slate-500 text-center font-mono">SECURE TRANSIT SSL ACTIVATED</div>
             </div>
           </div>
         </div>

@@ -16,7 +16,7 @@ import {
 } from "../db";
 import { User, Complaint, Ward, Department, Technician, AuditLog, ComplaintStatus, ComplaintPriority, AccountRequest } from "../types";
 import { collection, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth, isFirebaseEnabled } from "../firebase";
 import { 
   LayoutDashboard, 
   Users, 
@@ -219,8 +219,63 @@ export default function AdminDashboard({
   const complaintsClosed = complaints.filter(c => c.status === "Closed").length;
   const totalCouncillorsCount = users.filter(u => u.role === "councillor").length;
 
+  const createSecureUserInBackend = async (userData: any) => {
+    if (!isFirebaseEnabled || !auth) {
+      return null;
+    }
+    
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    if (!idToken) {
+      throw new Error("No authenticated session available. Please log in again.");
+    }
+    
+    const response = await fetch("/api/admin/users/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${idToken}`
+      },
+      body: JSON.stringify(userData)
+    });
+    
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || "User provisioning failed.");
+    }
+    
+    const data = await response.json();
+    return data.uid; // Firebase UID
+  };
+
+  const toggleUserStatusInBackend = async (userId: string, currentStatus: string) => {
+    if (!isFirebaseEnabled || !auth) {
+      return null;
+    }
+    
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    if (!idToken) {
+      throw new Error("No authenticated session available. Please log in again.");
+    }
+    
+    const response = await fetch("/api/admin/users/toggle-status", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${idToken}`
+      },
+      body: JSON.stringify({ userId, currentStatus })
+    });
+    
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error || "Failed to alter status.");
+    }
+    
+    return await response.json();
+  };
+
   // 1. Create Councillor Account (Super Admin only check inside function)
-  const handleCreateCouncillor = (e: React.FormEvent) => {
+  const handleCreateCouncillor = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (currentUser.role !== "super_admin") {
@@ -238,53 +293,77 @@ export default function AdminDashboard({
       return;
     }
 
-    // Strict duplications validation (Email, Username, SA ID number)
-    const isDuplicateUsername = users.some(u => u.username.toLowerCase() === newCllrUsername.toLowerCase().trim());
-    if (isDuplicateUsername) {
-      onAddToast("Validation Error", `The username "${newCllrUsername}" already exists. Please choose a unique username.`, "error");
-      return;
-    }
-
-    const isDuplicateEmail = users.some(u => u.email.toLowerCase() === newCllrEmail.toLowerCase().trim());
-    if (isDuplicateEmail) {
-      onAddToast("Validation Error", `The email address "${newCllrEmail}" is already registered in the CRM.`, "error");
-      return;
-    }
-
-    const isDuplicateId = users.some(u => u.saIdNumber === newCllrIdNumber.trim());
-    if (isDuplicateId) {
-      onAddToast("Validation Error", `The South African ID number "${newCllrIdNumber}" is already registered to an existing account.`, "error");
-      return;
-    }
-
-    // Auto generated ID
-    const nextId = `COUN-${users.length + 101}`;
-    
     // Find Ward details
     const selectedWardObj = wards.find(w => w.wardNumber === Number(newCllrWard));
     const wardName = selectedWardObj ? selectedWardObj.wardName : `Ward ${newCllrWard}`;
 
-    const newCllr: User = {
-      id: nextId,
-      name: newCllrName.trim(),
-      email: newCllrEmail.trim(),
-      phone: newCllrPhone.trim(),
-      physicalAddress: newCllrAddress.trim() || "Thulamela Ward Precinct",
-      username: newCllrUsername.trim(),
-      role: "councillor",
-      employeeNumber: newCllrEmpNumber.trim() || `EMP-CLLR-${newCllrWard}`,
-      saIdNumber: newCllrIdNumber.trim(),
-      wardNumber: Number(newCllrWard),
-      wardName: wardName,
-      politicalPosition: newCllrPolitical,
-      status: "active",
-      profilePicture: newCllrProfilePic.trim() || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
-      dateCreated: new Date().toISOString()
-    };
+    let nextId = "";
 
-    // Save Users
-    const updatedUsers = [...users, newCllr];
-    saveUsers(updatedUsers);
+    if (isFirebaseEnabled && auth) {
+      try {
+        const uid = await createSecureUserInBackend({
+          email: newCllrEmail.trim(),
+          password: newCllrPassword,
+          name: newCllrName.trim(),
+          phone: newCllrPhone.trim(),
+          physicalAddress: newCllrAddress.trim() || "Thulamela Ward Precinct",
+          username: newCllrUsername.trim(),
+          role: "councillor",
+          employeeNumber: newCllrEmpNumber.trim() || `EMP-CLLR-${newCllrWard}`,
+          saIdNumber: newCllrIdNumber.trim(),
+          wardNumber: Number(newCllrWard),
+          wardName: wardName,
+          politicalPosition: newCllrPolitical,
+          profilePicture: newCllrProfilePic.trim()
+        });
+        nextId = uid;
+      } catch (err: any) {
+        onAddToast("Provisioning Failed", err.message, "error");
+        return;
+      }
+    } else {
+      // Local Storage Fallback Duplication Checks
+      const isDuplicateUsername = users.some(u => u.username.toLowerCase() === newCllrUsername.toLowerCase().trim());
+      if (isDuplicateUsername) {
+        onAddToast("Validation Error", `The username "${newCllrUsername}" already exists. Please choose a unique username.`, "error");
+        return;
+      }
+
+      const isDuplicateEmail = users.some(u => u.email.toLowerCase() === newCllrEmail.toLowerCase().trim());
+      if (isDuplicateEmail) {
+        onAddToast("Validation Error", `The email address "${newCllrEmail}" is already registered in the CRM.`, "error");
+        return;
+      }
+
+      const isDuplicateId = users.some(u => u.saIdNumber === newCllrIdNumber.trim());
+      if (isDuplicateId) {
+        onAddToast("Validation Error", `The South African ID number "${newCllrIdNumber}" is already registered to an existing account.`, "error");
+        return;
+      }
+
+      nextId = `COUN-${users.length + 101}`;
+      
+      const newCllr: User = {
+        id: nextId,
+        name: newCllrName.trim(),
+        email: newCllrEmail.trim(),
+        phone: newCllrPhone.trim(),
+        physicalAddress: newCllrAddress.trim() || "Thulamela Ward Precinct",
+        username: newCllrUsername.trim(),
+        role: "councillor",
+        employeeNumber: newCllrEmpNumber.trim() || `EMP-CLLR-${newCllrWard}`,
+        saIdNumber: newCllrIdNumber.trim(),
+        wardNumber: Number(newCllrWard),
+        wardName: wardName,
+        politicalPosition: newCllrPolitical,
+        status: "active",
+        profilePicture: newCllrProfilePic.trim() || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+        dateCreated: new Date().toISOString()
+      };
+
+      const updatedUsers = [...users, newCllr];
+      saveUsers(updatedUsers);
+    }
 
     // Update Ward allocation details
     const updatedWards = wards.map(w => {
@@ -312,7 +391,7 @@ export default function AdminDashboard({
     // Toast and clear
     onAddToast(
       "Councillor Registered Successfully",
-      `Account for Cllr ${newCllrName} has been fully created. prefilled testing login: ${newCllrUsername} / password.`,
+      `Account for Cllr ${newCllrName} has been fully created and secured in Firebase.`,
       "success"
     );
 
@@ -330,37 +409,63 @@ export default function AdminDashboard({
     loadDashboardData();
   };
 
-  const handleApproveRequest = (request: AccountRequest) => {
-    // Reuse create councillor logic, but using request data
-    const nextId = `COUN-${users.length + 101}`;
+  const handleApproveRequest = async (request: AccountRequest) => {
     const selectedWardObj = wards.find(w => w.wardNumber === request.wardNumber);
     const wardName = selectedWardObj ? selectedWardObj.wardName : `Ward ${request.wardNumber}`;
 
     // Generate temporary password
     const tempPassword = Math.random().toString(36).slice(-8);
 
-    const newCllr: User = {
-      id: nextId,
-      name: request.name,
-      email: request.email,
-      phone: request.phone,
-      physicalAddress: "Thulamela Ward Precinct",
-      username: request.email.split("@")[0], // Simple username
-      role: "councillor",
-      employeeNumber: `EMP-CLLR-${request.wardNumber}`,
-      saIdNumber: request.saIdNumber,
-      wardNumber: request.wardNumber,
-      wardName: wardName,
-      politicalPosition: request.politicalPosition,
-      status: "active",
-      profilePicture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
-      dateCreated: new Date().toISOString(),
-      tempPassword: tempPassword,
-      mustChangePassword: true
-    };
+    let nextId = "";
 
-    const updatedUsers = [...users, newCllr];
-    saveUsers(updatedUsers);
+    if (isFirebaseEnabled && auth) {
+      try {
+        const uid = await createSecureUserInBackend({
+          email: request.email,
+          password: tempPassword,
+          name: request.name,
+          phone: request.phone,
+          physicalAddress: "Thulamela Ward Precinct",
+          username: request.email.split("@")[0],
+          role: "councillor",
+          employeeNumber: `EMP-CLLR-${request.wardNumber}`,
+          saIdNumber: request.saIdNumber,
+          wardNumber: request.wardNumber,
+          wardName: wardName,
+          politicalPosition: request.politicalPosition,
+          profilePicture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150"
+        });
+        nextId = uid;
+      } catch (err: any) {
+        onAddToast("Provisioning Failed", err.message, "error");
+        return;
+      }
+    } else {
+      nextId = `COUN-${users.length + 101}`;
+
+      const newCllr: User = {
+        id: nextId,
+        name: request.name,
+        email: request.email,
+        phone: request.phone,
+        physicalAddress: "Thulamela Ward Precinct",
+        username: request.email.split("@")[0],
+        role: "councillor",
+        employeeNumber: `EMP-CLLR-${request.wardNumber}`,
+        saIdNumber: request.saIdNumber,
+        wardNumber: request.wardNumber,
+        wardName: wardName,
+        politicalPosition: request.politicalPosition,
+        status: "active",
+        profilePicture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+        dateCreated: new Date().toISOString(),
+        tempPassword: tempPassword,
+        mustChangePassword: true
+      };
+
+      const updatedUsers = [...users, newCllr];
+      saveUsers(updatedUsers);
+    }
 
     const updatedWards = wards.map(w => {
       if (w.wardNumber === request.wardNumber) {
@@ -384,20 +489,30 @@ export default function AdminDashboard({
   };
 
   // Deactivate Councillor account
-  const handleToggleUserStatus = (userId: string, currentStatus: "active" | "inactive") => {
+  const handleToggleUserStatus = async (userId: string, currentStatus: "active" | "inactive") => {
     if (currentUser.role !== "super_admin") {
       onAddToast("Unauthorized Action", "Only Super Administrators can modify account status.", "error");
       return;
     }
 
     const nextStatus = currentStatus === "active" ? "inactive" : "active";
-    const updatedUsers = users.map(u => {
-      if (u.id === userId) {
-        return { ...u, status: nextStatus };
+
+    if (isFirebaseEnabled && auth) {
+      try {
+        await toggleUserStatusInBackend(userId, currentStatus);
+      } catch (err: any) {
+        onAddToast("Modification Failed", err.message, "error");
+        return;
       }
-      return u;
-    });
-    saveUsers(updatedUsers);
+    } else {
+      const updatedUsers = users.map(u => {
+        if (u.id === userId) {
+          return { ...u, status: nextStatus };
+        }
+        return u;
+      });
+      saveUsers(updatedUsers);
+    }
 
     // If deactivated, we clear them from the Ward details
     if (nextStatus === "inactive") {
@@ -428,6 +543,7 @@ export default function AdminDashboard({
       `User ${userId} status has been toggled to ${nextStatus} successfully.`,
       "success"
     );
+
     loadDashboardData();
   };
 

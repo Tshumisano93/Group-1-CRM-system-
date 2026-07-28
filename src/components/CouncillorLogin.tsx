@@ -3,6 +3,8 @@ import { Lock, User as UserIcon, ShieldCheck, CheckSquare, Eye, EyeOff, Building
 import { getUsers, setCurrentUser, addAuditLog } from "../db";
 import { User } from "../types";
 import RequestAccountModal from "./RequestAccountModal";
+import { isFirebaseEnabled, auth } from "../firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 interface CouncillorLoginProps {
   onLoginSuccess: (user: User) => void;
@@ -18,7 +20,7 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
   const [loading, setLoading] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
       onAddToast("Login Failed", "Username and password are required.", "warning");
@@ -27,56 +29,64 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
 
     setLoading(true);
 
-    setTimeout(() => {
-      const users = getUsers();
-      const matchedUser = users.find(
-        (u) => u.username.toLowerCase() === username.toLowerCase().trim()
-      );
+    const users = getUsers();
+    const matchedUser = users.find(
+      (u) => 
+        u.username.toLowerCase() === username.toLowerCase().trim() ||
+        u.email.toLowerCase() === username.toLowerCase().trim()
+    );
 
-      if (!matchedUser) {
-        setLoading(false);
-        onAddToast("Authentication Failed", "Username not registered in the CRM database.", "error");
-        return;
-      }
-
-      if (password !== "password") {
-        setLoading(false);
-        onAddToast("Authentication Failed", "Incorrect password. Please use 'password' for testing.", "error");
-        return;
-      }
-
-      if (matchedUser.role !== "councillor") {
-        setLoading(false);
-        onAddToast("Access Denied", "Please use the Secure Staff Access portal for administrator/technician accounts.", "warning");
-        return;
-      }
-
-      if (matchedUser.status !== "active") {
-        setLoading(false);
-        onAddToast("Account Suspended", "This councillor account is currently deactivated. Contact the Super Administrator.", "error");
-        return;
-      }
-
-      // Success
-      setCurrentUser(matchedUser);
-      addAuditLog(
-        matchedUser.id,
-        matchedUser.name,
-        matchedUser.role,
-        "User Login",
-        `Councillor logged in successfully. Ward: ${matchedUser.wardNumber} (${matchedUser.wardName}).`
-      );
-
+    if (!matchedUser) {
       setLoading(false);
-      onLoginSuccess(matchedUser);
-      onAddToast("Login Successful", `Welcome back, Cllr ${matchedUser.name.split(" ").slice(-1)[0]}! Redirecting...`, "success");
-    }, 1000);
+      onAddToast("Authentication Failed", "Username not registered in the CRM database.", "error");
+      return;
+    }
+
+    if (matchedUser.role !== "councillor") {
+      setLoading(false);
+      onAddToast("Access Denied", "Please use the Secure Staff Access portal for administrator/technician accounts.", "warning");
+      return;
+    }
+
+    if (matchedUser.status !== "active") {
+      setLoading(false);
+      onAddToast("Account Suspended", "This councillor account is currently deactivated. Contact the Super Administrator.", "error");
+      return;
+    }
+
+    if (isFirebaseEnabled && auth) {
+      try {
+        await signInWithEmailAndPassword(auth, matchedUser.email, password);
+      } catch (err: any) {
+        setLoading(false);
+        onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
+        return;
+      }
+    } else {
+      setLoading(false);
+      onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
+      return;
+    }
+
+    // Success
+    setCurrentUser(matchedUser);
+    addAuditLog(
+      matchedUser.id,
+      matchedUser.name,
+      matchedUser.role,
+      "User Login",
+      `Councillor logged in successfully. Ward: ${matchedUser.wardNumber} (${matchedUser.wardName}).`
+    );
+
+    setLoading(false);
+    onLoginSuccess(matchedUser);
+    onAddToast("Login Successful", `Welcome back, Cllr ${matchedUser.name.split(" ").slice(-1)[0]}! Redirecting...`, "success");
   };
 
   const handleAutofill = (usernameVal: string) => {
     setUsername(usernameVal);
-    setPassword("password");
-    onAddToast("Credentials Preloaded", `Selected ${usernameVal}. Click 'Authenticate' to login.`, "info");
+    setPassword("");
+    onAddToast("Credentials Preloaded", `Selected ${usernameVal}. Please enter your correct account password to login.`, "info");
   };
 
   return (
@@ -231,7 +241,7 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
                   <span className="text-[9px] text-slate-500 font-mono mt-0.5">cllr5 • Ward 5 (Maniini)</span>
                 </button>
               </div>
-              <div className="text-[10px] text-slate-400 text-center font-mono pt-1">ALL PASSWORDS: "password"</div>
+              <div className="text-[10px] text-slate-400 text-center font-mono pt-1">SECURE CLIENT TRANSIT ACTIVATED</div>
             </div>
           </div>
         </div>

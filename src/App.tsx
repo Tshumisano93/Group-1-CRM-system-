@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { initializeDb, getCurrentUser, setCurrentUser } from "./db";
+import { initializeDb, getCurrentUser, setCurrentUser, getUsers, saveUsers, migrateUserId } from "./db";
+import { isFirebaseEnabled, auth, db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { User } from "./types";
 
 // Public Views
@@ -74,9 +76,80 @@ export default function App() {
 
   useEffect(() => {
     initializeDb();
-    const existingUser = getCurrentUser();
-    if (existingUser) {
-      setCurrentUserState(existingUser);
+    
+    if (isFirebaseEnabled && auth) {
+      const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: any) => {
+        if (firebaseUser) {
+          if (firebaseUser.isAnonymous) {
+            console.log("Anonymous session active for synchronization.");
+            return;
+          }
+          try {
+            const userDocRef = doc(db, "users", firebaseUser.uid);
+            const userSnap = await getDoc(userDocRef);
+            
+            if (userSnap.exists()) {
+              const matched = userSnap.data() as User;
+              if (matched.status !== "active") {
+                addToast("Account Suspended", "This staff/councillor account is currently deactivated.", "error");
+                auth.signOut();
+                setCurrentUserState(null);
+                setCurrentUser(null);
+                return;
+              }
+              
+              // Cache in local storage for instant loading on refresh
+              const localUsers = getUsers();
+              const idx = localUsers.findIndex(u => u.id === matched.id);
+              if (idx >= 0) {
+                localUsers[idx] = matched;
+              } else {
+                localUsers.push(matched);
+              }
+              localStorage.setItem("thulamela_crm_users", JSON.stringify(localUsers));
+              
+              setCurrentUserState(matched);
+              setCurrentUser(matched);
+            } else {
+              console.warn("No Firestore profile found for UID:", firebaseUser.uid);
+              addToast("Authentication Failed", "No profile registered for this account.", "error");
+              auth.signOut();
+              setCurrentUserState(null);
+              setCurrentUser(null);
+            }
+          } catch (err: any) {
+            console.error("Error fetching user profile:", err);
+            // Fallback to local storage cache matching
+            const users = getUsers();
+            let matched = users.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
+            if (matched) {
+              if (matched.id !== firebaseUser.uid) {
+                migrateUserId(matched.id, firebaseUser.uid);
+                const reloadedUsers = getUsers();
+                matched = reloadedUsers.find(u => u.id === firebaseUser.uid);
+              }
+              if (matched) {
+                setCurrentUserState(matched);
+                setCurrentUser(matched);
+              }
+            } else {
+              addToast("Authentication Error", "Could not synchronize secure staff profile.", "error");
+              auth.signOut();
+              setCurrentUserState(null);
+              setCurrentUser(null);
+            }
+          }
+        } else {
+          setCurrentUserState(null);
+          setCurrentUser(null);
+        }
+      });
+      return () => unsubscribe();
+    } else {
+      const existingUser = getCurrentUser();
+      if (existingUser) {
+        setCurrentUserState(existingUser);
+      }
     }
   }, []);
 
@@ -98,6 +171,9 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (isFirebaseEnabled && auth) {
+      auth.signOut().catch((err: any) => console.error(err));
+    }
     setCurrentUser(null);
     setCurrentUserState(null);
     navigate("/");

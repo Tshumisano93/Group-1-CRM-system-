@@ -1,11 +1,12 @@
 {
-  "projectId": "impressive-path-w3bk6",
-  "appId": "1:446950856804:web:a8af78395840499a1b6771",
-  "apiKey": "AIzaSyAN0yVegszwrWeJu-RAXmTKyiIuRFm3YFw",
-  "authDomain": "impressive-path-w3bk6.firebaseapp.com",
+  "projectId": "thulamela-crm",
+  "appId": "1:889321626562:web:20cd9e0dff366004dad45b",
+  "apiKey": "AIzaSyD_5vJymHCWcFkzLvOBmYYOylK9CFbHpbo",
+  "authDomain": "thulamela-crm.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-thulamelamunicip-63f3ab9a-598c-48d8-971e-a116b124c260",
-  "storageBucket": "impressive-path-w3bk6.firebasestorage.app",
-  "messagingSenderId": "446950856804",
+  "storageBucket": "thulamela-crm.firebasestorage.app",
+  "messagingSenderId": "889321626562",
   "measurementId": "",
-  "oAuthClientId": "446950856804-teb33gni0cck43s9t8mk6ki3rr7mjbbc.apps.googleusercontent.com"
+  "oAuthClientId": "889321626562-s50diibts1grvtb1ih767cvcqd8gqc1k.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }
