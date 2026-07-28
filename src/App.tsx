@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { initializeDb, getCurrentUser, setCurrentUser, getUsers, saveUsers, migrateUserId } from "./db";
+import { initializeDb, getCurrentUser, setCurrentUser, getUsers, saveUsers, migrateUserId, cleanCorruptedFirestoreUsers } from "./db";
 import { isFirebaseEnabled, auth, db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { User } from "./types";
@@ -111,7 +111,21 @@ export default function App() {
               setCurrentUserState(matched);
               setCurrentUser(matched);
             } else {
-              console.warn("No Firestore profile found for UID:", firebaseUser.uid);
+              console.warn("No Firestore document found directly for UID:", firebaseUser.uid, "Checking local profile cache...");
+              const users = getUsers();
+              let matched = users.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
+              if (matched) {
+                if (matched.id !== firebaseUser.uid) {
+                  migrateUserId(matched.id, firebaseUser.uid);
+                  const reloadedUsers = getUsers();
+                  matched = reloadedUsers.find(u => u.id === firebaseUser.uid);
+                }
+                if (matched) {
+                  setCurrentUserState(matched);
+                  setCurrentUser(matched);
+                  return;
+                }
+              }
               addToast("Authentication Failed", "No profile registered for this account.", "error");
               auth.signOut();
               setCurrentUserState(null);
@@ -152,6 +166,12 @@ export default function App() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (currentUser && (currentUser.role === "super_admin" || currentUser.role === "municipal_admin")) {
+      cleanCorruptedFirestoreUsers();
+    }
+  }, [currentUser]);
 
   const addToast = (title: string, message: string, type: "success" | "info" | "warning" | "error") => {
     const newToast: Toast = {

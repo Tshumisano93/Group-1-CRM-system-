@@ -3,7 +3,7 @@ import { Lock, User as UserIcon, ShieldAlert, KeyRound, Eye, EyeOff, Terminal } 
 import { getUsers, setCurrentUser, addAuditLog } from "../db";
 import { User } from "../types";
 import { isFirebaseEnabled, auth } from "../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
 interface AdminLoginProps {
   onLoginSuccess: (user: User) => void;
@@ -26,111 +26,96 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
 
     setLoading(true);
 
-    const users = Array.isArray(getUsers()) ? getUsers() : [];
-    const enteredVal = username.toLowerCase().trim();
+    try {
+      const users = Array.isArray(getUsers()) ? getUsers() : [];
+      const enteredVal = username.toLowerCase().trim();
 
-    const isLegacyProfile = (u: User) =>
-      u.id.startsWith("ADMIN-") ||
-      u.id.startsWith("COUN-") ||
-      u.id.startsWith("TECH-");
+      const matchedUser = users.find(
+        (u) =>
+          (u.username || "").toLowerCase().trim() === enteredVal ||
+          (u.email || "").toLowerCase().trim() === enteredVal ||
+          (u.name || "").toLowerCase().trim() === enteredVal ||
+          (u.id || "").toLowerCase().trim() === enteredVal
+      );
 
-    let matchedUser: User | undefined = undefined;
+      if (!matchedUser) {
+        setLoading(false);
+        onAddToast("Authentication Failed", "Username or account ID not registered in the administrative database.", "error");
+        return;
+      }
 
-    // 1. Check for exact email matches
-    const emailMatches = users.filter((u) => u.email.toLowerCase() === enteredVal);
-    
-    // 2. Check for username matches on real profiles
-    const realUsernameMatches = users.filter(
-      (u) => u.username.toLowerCase() === enteredVal && !isLegacyProfile(u)
-    );
+      if (matchedUser.role === "councillor") {
+        setLoading(false);
+        onAddToast("Access Denied", "Councillor accounts must use the main Councillor Login portal.", "warning");
+        return;
+      }
 
-    // 3. Check for username matches on legacy profiles
-    const legacyUsernameMatches = users.filter(
-      (u) => u.username.toLowerCase() === enteredVal && isLegacyProfile(u)
-    );
+      if (matchedUser.status !== "active") {
+        setLoading(false);
+        onAddToast("Account Suspended", "This staff account is currently deactivated. Contact Vhembe IT support.", "error");
+        return;
+      }
 
-    if (emailMatches.length > 0) {
-      const realEmailMatches = emailMatches.filter((u) => !isLegacyProfile(u));
-      if (realEmailMatches.length > 0) {
-        if (realEmailMatches.length > 1) {
-          setLoading(false);
-          onAddToast("Authentication Failed", "Multiple real profiles found matching this email. Access is ambiguous.", "error");
-          return;
+      if (isFirebaseEnabled && auth) {
+        try {
+          await signInWithEmailAndPassword(auth, matchedUser.email, password);
+        } catch (err: any) {
+          if (
+            err.code === "auth/user-not-found" ||
+            err.code === "auth/invalid-credential" ||
+            err.message?.includes("user-not-found") ||
+            err.message?.includes("invalid-credential")
+          ) {
+            try {
+              await createUserWithEmailAndPassword(auth, matchedUser.email, password);
+            } catch (createErr: any) {
+              if (createErr.code === "auth/email-already-in-use") {
+                setLoading(false);
+                onAddToast("Authentication Failed", "Incorrect password for this account.", "error");
+                return;
+              } else if (createErr.code === "auth/weak-password") {
+                setLoading(false);
+                onAddToast("Authentication Failed", "Password must be at least 6 characters.", "error");
+                return;
+              } else {
+                setLoading(false);
+                onAddToast("Authentication Failed", `Authentication error: ${createErr.message}`, "error");
+                return;
+              }
+            }
+          } else {
+            setLoading(false);
+            onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
+            return;
+          }
         }
-        matchedUser = realEmailMatches[0];
       } else {
-        if (emailMatches.length > 1) {
-          setLoading(false);
-          onAddToast("Authentication Failed", "Multiple profiles found matching this email. Access is ambiguous.", "error");
-          return;
-        }
-        matchedUser = emailMatches[0];
-      }
-    } else if (realUsernameMatches.length > 0) {
-      if (realUsernameMatches.length > 1) {
         setLoading(false);
-        onAddToast("Authentication Failed", "Multiple real profiles found matching this username. Access is ambiguous.", "error");
+        onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
         return;
       }
-      matchedUser = realUsernameMatches[0];
-    } else if (legacyUsernameMatches.length > 0) {
-      if (legacyUsernameMatches.length > 1) {
-        setLoading(false);
-        onAddToast("Authentication Failed", "Multiple legacy profiles found matching this username. Access is ambiguous.", "error");
-        return;
-      }
-      matchedUser = legacyUsernameMatches[0];
-    }
 
-    if (!matchedUser) {
+      // Success
+      setCurrentUser(matchedUser);
+      addAuditLog(
+        matchedUser.id,
+        matchedUser.name,
+        matchedUser.role,
+        "Admin Login",
+        `Administrative user logged in successfully. Role: ${matchedUser.role}.`
+      );
+
       setLoading(false);
-      onAddToast("Authentication Failed", "Username not registered in the administrative database.", "error");
-      return;
-    }
-
-    if (matchedUser.role === "councillor") {
+      onLoginSuccess(matchedUser);
+      onAddToast(
+        "Secure Session Established",
+        `Welcome, ${matchedUser.name}! Opening Executive Dashboard...`,
+        "success"
+      );
+    } catch (err: any) {
       setLoading(false);
-      onAddToast("Access Denied", "Councillor accounts must use the main Councillor Login portal.", "warning");
-      return;
+      onAddToast("Authentication Failed", `An unexpected login error occurred: ${err.message}`, "error");
     }
-
-    if (matchedUser.status !== "active") {
-      setLoading(false);
-      onAddToast("Account Suspended", "This staff account is currently deactivated. Contact Vhembe IT support.", "error");
-      return;
-    }
-
-    if (isFirebaseEnabled && auth) {
-      try {
-        await signInWithEmailAndPassword(auth, matchedUser.email, password);
-      } catch (err: any) {
-        setLoading(false);
-        onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
-        return;
-      }
-    } else {
-      setLoading(false);
-      onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
-      return;
-    }
-
-    // Success
-    setCurrentUser(matchedUser);
-    addAuditLog(
-      matchedUser.id,
-      matchedUser.name,
-      matchedUser.role,
-      "Admin Login",
-      `Administrative user logged in successfully. Role: ${matchedUser.role}.`
-    );
-
-    setLoading(false);
-    onLoginSuccess(matchedUser);
-    onAddToast(
-      "Secure Session Established",
-      `Welcome, ${matchedUser.name}! Opening Executive Dashboard...`,
-      "success"
-    );
   };
 
   const handleAutofill = (usernameVal: string) => {

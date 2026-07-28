@@ -11,7 +11,8 @@ import {
   query, 
   writeBatch,
   where,
-  limit
+  limit,
+  deleteDoc
 } from "firebase/firestore";
 
 export enum OperationType {
@@ -272,7 +273,14 @@ async function setupFirestoreListenersAndSync() {
   // Setup Real-Time Listeners to update localstorage dynamically when data changes on cloud
   onSnapshot(collection(db, "users"), (snapshot) => {
     const list: User[] = [];
-    snapshot.forEach(doc => list.push(doc.data() as User));
+    snapshot.forEach(docSnap => {
+      const u = docSnap.data() as User;
+      if (u && u.id && u.username && u.email) {
+        list.push(u);
+      } else {
+        console.warn("Ignored incomplete user profile from Firestore users snapshot:", docSnap.id, u);
+      }
+    });
     if (list.length > 0) {
       localStorage.setItem("thulamela_crm_users", JSON.stringify(list));
       triggerDbUpdateEvent();
@@ -337,7 +345,8 @@ async function setupFirestoreListenersAndSync() {
 
 // Low-level Getters & Setters
 export function getUsers(): User[] {
-  return JSON.parse(localStorage.getItem("thulamela_crm_users") || "[]");
+  const users = JSON.parse(localStorage.getItem("thulamela_crm_users") || "[]");
+  return Array.isArray(users) ? users.filter((u: any) => u && u.id && u.username && u.email) : [];
 }
 
 export function saveUsers(users: User[]) {
@@ -804,5 +813,30 @@ export function migrateUserId(oldId: string, newId: string) {
   });
   if (formsUpdated) {
     saveDigitalForms(updatedForms);
+  }
+}
+
+export async function cleanCorruptedFirestoreUsers() {
+  if (!isFirebaseEnabled || !db) return;
+  try {
+    const currentUser = getCurrentUser();
+    if (currentUser && (currentUser.role === "super_admin" || currentUser.role === "municipal_admin")) {
+      console.log("[CLEANUP]: Admin session active. Scanning Firestore users collection for corrupted documents...");
+      const snap = await getDocs(collection(db, "users"));
+      snap.forEach(async (docSnap) => {
+        const data = docSnap.data();
+        if (!data || !docSnap.id || !data.id || !data.username || !data.email) {
+          console.warn(`[CLEANUP]: Deleting corrupted user document ${docSnap.id} from Firestore...`);
+          try {
+            await deleteDoc(doc(db, "users", docSnap.id));
+            console.log(`[CLEANUP]: Successfully deleted corrupted user document ${docSnap.id}`);
+          } catch (deleteErr) {
+            console.warn(`[CLEANUP]: Failed to delete corrupted document ${docSnap.id}:`, deleteErr);
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[CLEANUP]: Failed to clean corrupted Firestore users (this is expected if unauthorized or offline):", err);
   }
 }

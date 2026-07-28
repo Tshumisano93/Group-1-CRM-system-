@@ -4,7 +4,7 @@ import { getUsers, setCurrentUser, addAuditLog } from "../db";
 import { User } from "../types";
 import RequestAccountModal from "./RequestAccountModal";
 import { isFirebaseEnabled, auth } from "../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 
 interface CouncillorLoginProps {
   onLoginSuccess: (user: User) => void;
@@ -29,58 +29,91 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
 
     setLoading(true);
 
-    const users = getUsers();
-    const matchedUser = users.find(
-      (u) => 
-        u.username.toLowerCase() === username.toLowerCase().trim() ||
-        u.email.toLowerCase() === username.toLowerCase().trim()
-    );
+    try {
+      const users = getUsers();
+      const enteredVal = username.toLowerCase().trim();
+      const matchedUser = users.find(
+        (u) => 
+          (u.username || "").toLowerCase().trim() === enteredVal ||
+          (u.email || "").toLowerCase().trim() === enteredVal ||
+          (u.name || "").toLowerCase().trim() === enteredVal ||
+          (u.id || "").toLowerCase().trim() === enteredVal
+      );
 
-    if (!matchedUser) {
-      setLoading(false);
-      onAddToast("Authentication Failed", "Username not registered in the CRM database.", "error");
-      return;
-    }
-
-    if (matchedUser.role !== "councillor") {
-      setLoading(false);
-      onAddToast("Access Denied", "Please use the Secure Staff Access portal for administrator/technician accounts.", "warning");
-      return;
-    }
-
-    if (matchedUser.status !== "active") {
-      setLoading(false);
-      onAddToast("Account Suspended", "This councillor account is currently deactivated. Contact the Super Administrator.", "error");
-      return;
-    }
-
-    if (isFirebaseEnabled && auth) {
-      try {
-        await signInWithEmailAndPassword(auth, matchedUser.email, password);
-      } catch (err: any) {
+      if (!matchedUser) {
         setLoading(false);
-        onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
+        onAddToast("Authentication Failed", "Username not registered in the CRM database.", "error");
         return;
       }
-    } else {
+
+      if (matchedUser.role !== "councillor") {
+        setLoading(false);
+        onAddToast("Access Denied", "Please use the Secure Staff Access portal for administrator/technician accounts.", "warning");
+        return;
+      }
+
+      if (matchedUser.status !== "active") {
+        setLoading(false);
+        onAddToast("Account Suspended", "This councillor account is currently deactivated. Contact the Super Administrator.", "error");
+        return;
+      }
+
+      if (isFirebaseEnabled && auth) {
+        try {
+          await signInWithEmailAndPassword(auth, matchedUser.email, password);
+        } catch (err: any) {
+          if (
+            err.code === "auth/user-not-found" ||
+            err.code === "auth/invalid-credential" ||
+            err.message?.includes("user-not-found") ||
+            err.message?.includes("invalid-credential")
+          ) {
+            try {
+              await createUserWithEmailAndPassword(auth, matchedUser.email, password);
+            } catch (createErr: any) {
+              if (createErr.code === "auth/email-already-in-use") {
+                setLoading(false);
+                onAddToast("Authentication Failed", "Incorrect password for this account.", "error");
+                return;
+              } else if (createErr.code === "auth/weak-password") {
+                setLoading(false);
+                onAddToast("Authentication Failed", "Password must be at least 6 characters.", "error");
+                return;
+              } else {
+                setLoading(false);
+                onAddToast("Authentication Failed", `Authentication error: ${createErr.message}`, "error");
+                return;
+              }
+            }
+          } else {
+            setLoading(false);
+            onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
+            return;
+          }
+        }
+      } else {
+        setLoading(false);
+        onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
+        return;
+      }
+
+      // Success
+      setCurrentUser(matchedUser);
+      addAuditLog(
+        matchedUser.id,
+        matchedUser.name,
+        matchedUser.role,
+        "User Login",
+        `Councillor logged in successfully. Ward: ${matchedUser.wardNumber} (${matchedUser.wardName}).`
+      );
+
       setLoading(false);
-      onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
-      return;
+      onLoginSuccess(matchedUser);
+      onAddToast("Login Successful", `Welcome back, Cllr ${matchedUser.name.split(" ").slice(-1)[0]}! Redirecting...`, "success");
+    } catch (err: any) {
+      setLoading(false);
+      onAddToast("Authentication Failed", `An unexpected login error occurred: ${err.message}`, "error");
     }
-
-    // Success
-    setCurrentUser(matchedUser);
-    addAuditLog(
-      matchedUser.id,
-      matchedUser.name,
-      matchedUser.role,
-      "User Login",
-      `Councillor logged in successfully. Ward: ${matchedUser.wardNumber} (${matchedUser.wardName}).`
-    );
-
-    setLoading(false);
-    onLoginSuccess(matchedUser);
-    onAddToast("Login Successful", `Welcome back, Cllr ${matchedUser.name.split(" ").slice(-1)[0]}! Redirecting...`, "success");
   };
 
   const handleAutofill = (usernameVal: string) => {
