@@ -37,8 +37,22 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+
+  const isWebChannelTransportError = 
+    errMsg.includes("WebChannel") ||
+    errMsg.includes("listenStream") ||
+    errMsg.includes("transport error") ||
+    errMsg.includes("UNAVAILABLE") ||
+    errMsg.includes("Could not reach Cloud Firestore");
+
+  if (isWebChannelTransportError) {
+    console.debug(`[FIRESTORE TRANSPORT]: Transient WebChannel reconnect on collection '${path}':`, errMsg);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth?.currentUser?.uid || null,
       email: auth?.currentUser?.email || null,
@@ -50,11 +64,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   };
 
   const isPermissionError = 
-    errInfo.error.includes("permission") || 
-    errInfo.error.includes("Permission") || 
-    errInfo.error.includes("insufficient") ||
-    errInfo.error.includes("unauthenticated") ||
-    errInfo.error.includes("auth/");
+    errMsg.includes("permission") || 
+    errMsg.includes("Permission") || 
+    errMsg.includes("insufficient") ||
+    errMsg.includes("unauthenticated") ||
+    errMsg.includes("auth/");
 
   if (isPermissionError) {
     console.warn("Firestore Security Warning: ", JSON.stringify(errInfo));
@@ -73,10 +87,44 @@ export function getSyncStatus() {
   return syncStatus;
 }
 
+export const isDemoMode = (() => {
+  if (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") return true;
+  if (typeof import.meta !== "undefined" && (import.meta.env?.DEV || import.meta.env?.MODE === "development")) return true;
+  if (typeof window !== "undefined") {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.href.includes("-dev-")) {
+      return true;
+    }
+  }
+  return false;
+})();
+
 export function initializeDb() {
   // 1. Setup local storage seeding first so app works instantly
-  if (!localStorage.getItem("thulamela_crm_users")) {
-    localStorage.setItem("thulamela_crm_users", JSON.stringify(SEED_USERS));
+  let currentUsers: any[] = [];
+  try {
+    currentUsers = JSON.parse(localStorage.getItem("thulamela_crm_users") || "[]");
+  } catch (e) {
+    currentUsers = [];
+  }
+  if (!Array.isArray(currentUsers) || currentUsers.length === 0) {
+    if (isDemoMode) {
+      localStorage.setItem("thulamela_crm_users", JSON.stringify(SEED_USERS));
+    } else {
+      localStorage.setItem("thulamela_crm_users", JSON.stringify([]));
+    }
+  } else {
+    const userMap = new Map<string, User>();
+    // Ensure foundation is SEED_USERS if in demo mode
+    if (isDemoMode) {
+      SEED_USERS.forEach(u => userMap.set(u.id, u));
+    }
+    // Keep or update any custom fields/creations
+    currentUsers.forEach((u: any) => {
+      if (u && u.id) {
+        userMap.set(u.id, { ...userMap.get(u.id), ...u });
+      }
+    });
+    localStorage.setItem("thulamela_crm_users", JSON.stringify(Array.from(userMap.values())));
   }
   if (!localStorage.getItem("thulamela_crm_wards")) {
     localStorage.setItem("thulamela_crm_wards", JSON.stringify(SEED_WARDS));
@@ -224,72 +272,178 @@ function triggerDbUpdateEvent() {
   window.dispatchEvent(new Event("thulamela_db_update"));
 }
 
+const ADMIN_ONLY_SEED_COLLECTIONS = new Set([
+  "users",
+  "wards",
+  "departments",
+  "technicians",
+  "announcements",
+  "serviceNotices"
+]);
+
+const completedSeedChecks = new Set<string>();
+let activeSnapshotUnsubscribes: (() => void)[] = [];
+let listenersInitialized = false;
+
+export function isCurrentAdmin(): boolean {
+  const currentUser = getCurrentUser();
+  if (!currentUser) return false;
+  return currentUser.role === "super_admin" || currentUser.role === "municipal_admin";
+}
+
+export function cleanupFirestoreListeners() {
+  if (activeSnapshotUnsubscribes.length > 0) {
+    console.log(`[FIRESTORE]: Cleaning up ${activeSnapshotUnsubscribes.length} active snapshot listeners...`);
+    activeSnapshotUnsubscribes.forEach(unsub => {
+      try { unsub(); } catch (e) { /* ignore */ }
+    });
+    activeSnapshotUnsubscribes = [];
+  }
+  listenersInitialized = false;
+}
+
+export async function triggerAdminSeedingIfAuthorized() {
+  if (!isFirebaseEnabled || !db) return;
+  if (!isCurrentAdmin()) return;
+
+  // Admin session active, allow check for empty admin collections
+  ADMIN_ONLY_SEED_COLLECTIONS.forEach(col => completedSeedChecks.delete(col));
+  await runRoleAwareSeedChecks();
+}
+
+async function runRoleAwareSeedChecks() {
+  if (!isFirebaseEnabled || !db) return;
+
+  const isAdmin = isCurrentAdmin();
+
+  const seedIfAllowed = async (collectionName: string, getLocalData: () => any[]) => {
+    const isAdminOnly = ADMIN_ONLY_SEED_COLLECTIONS.has(collectionName);
+
+    // If administrative write required and current user is not admin, skip silently
+    if (isAdminOnly && !isAdmin) {
+      if (!completedSeedChecks.has(collectionName)) {
+        completedSeedChecks.add(collectionName);
+        console.debug(`[SEED]: Skipped admin collection '${collectionName}' seed check — non-admin session.`);
+      }
+      return;
+    }
+
+    if (completedSeedChecks.has(collectionName)) return;
+    completedSeedChecks.add(collectionName);
+
+    try {
+      const q = query(collection(db, collectionName), limit(1));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        console.log(`[SEED]: Seeding empty Firestore collection '${collectionName}'...`);
+        const data = getLocalData();
+        if (data && data.length > 0) {
+          const batch = writeBatch(db);
+          data.forEach(item => {
+            const docRef = doc(collection(db, collectionName), item.id || `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`);
+            batch.set(docRef, item);
+          });
+          await batch.commit();
+          console.log(`[SEED]: Successfully seeded collection '${collectionName}'.`);
+        }
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes("permission") || errMsg.includes("insufficient")) {
+        console.debug(`[SEED]: Seeding skipped for '${collectionName}' (insufficient permission).`);
+      } else {
+        console.warn(`[SEED]: Could not check/seed collection '${collectionName}':`, errMsg);
+      }
+    }
+  };
+
+  if (isDemoMode) {
+    await seedIfAllowed("users", getUsers);
+  }
+  await seedIfAllowed("wards", getWards);
+  await seedIfAllowed("departments", getDepartments);
+  await seedIfAllowed("technicians", getTechnicians);
+  await seedIfAllowed("complaints", getComplaints);
+  await seedIfAllowed("announcements", getAnnouncements);
+  await seedIfAllowed("notifications", getNotifications);
+  await seedIfAllowed("auditLogs", getAuditLogs);
+  await seedIfAllowed("serviceNotices", getServiceNotices);
+}
+
 // Background FireStore Real-Time Listener and Seeding Sync Manager
 async function setupFirestoreListenersAndSync() {
   if (!isFirebaseEnabled || !db) return;
 
-  // Helper to check if a collection is empty
-  const isCollectionEmpty = async (collectionName: string) => {
-    try {
-      const q = query(collection(db, collectionName), limit(1));
-      const snap = await getDocs(q);
-      return snap.empty;
-    } catch (error) {
-      console.warn(`Could not check if collection ${collectionName} is empty (expected if restricted):`, error);
-      return false;
-    }
-  };
+  // Prevent duplicate listener attachments
+  if (listenersInitialized && activeSnapshotUnsubscribes.length > 0) {
+    return;
+  }
 
-  // Seeding Firestore from Local Storage if empty (ensures Firebase backend is instant-loaded)
-  const seedIfEmpty = async (collectionName: string, getLocalData: () => any[]) => {
-    const empty = await isCollectionEmpty(collectionName);
-    if (empty) {
-      console.log(`Seeding Firestore collection: ${collectionName} with initial data...`);
-      const data = getLocalData();
-      const batch = writeBatch(db);
-      data.forEach(item => {
-        const docRef = doc(collection(db, collectionName), item.id || `doc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`);
-        batch.set(docRef, item);
-      });
-      try {
-        await batch.commit();
-      } catch (error) {
-        console.warn(`Seeding Firestore collection ${collectionName} skipped (expected if not Admin):`, error);
-      }
-    }
-  };
+  cleanupFirestoreListeners();
+  await runRoleAwareSeedChecks();
 
-  // Run seed check for core collections
-  await seedIfEmpty("users", getUsers);
-  await seedIfEmpty("wards", getWards);
-  await seedIfEmpty("departments", getDepartments);
-  await seedIfEmpty("technicians", getTechnicians);
-  await seedIfEmpty("complaints", getComplaints);
-  await seedIfEmpty("announcements", getAnnouncements);
-  await seedIfEmpty("notifications", getNotifications);
-  await seedIfEmpty("auditLogs", getAuditLogs);
-  await seedIfEmpty("serviceNotices", getServiceNotices);
+  listenersInitialized = true;
 
-  // Setup Real-Time Listeners to update localstorage dynamically when data changes on cloud
-  onSnapshot(collection(db, "users"), (snapshot) => {
-    const list: User[] = [];
+  // Setup Real-Time Listeners with tracked unsubscribes
+  const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+    const firestoreUsers: User[] = [];
     snapshot.forEach(docSnap => {
-      const u = docSnap.data() as User;
-      if (u && u.id && u.username && u.email) {
-        list.push(u);
-      } else {
-        console.warn("Ignored incomplete user profile from Firestore users snapshot:", docSnap.id, u);
+      const u = docSnap.data() as any;
+      if (u) {
+        const userId = u.id || docSnap.id;
+        const username = u.username || u.email?.split("@")[0] || docSnap.id.toLowerCase();
+        const email = u.email || `${username}@thulamela.gov.za`;
+
+        const mappedUser: User = {
+          id: userId,
+          name: u.name || "",
+          email: email,
+          phone: u.phone || "",
+          physicalAddress: u.physicalAddress || "",
+          username: username,
+          role: u.role || (u.superAdmin === true || u.superAdmin === "true" ? "super_admin" : "municipal_admin"),
+          employeeNumber: u.employeeNumber || "",
+          saIdNumber: u.saIdNumber || u["AC ID number"] || u["saIdNumber"] || "",
+          wardNumber: typeof u.wardNumber === "number" ? u.wardNumber : (u.wardNumber ? parseInt(u.wardNumber, 10) : undefined),
+          wardName: u.wardName || "",
+          politicalPosition: u.politicalPosition || "",
+          profilePicture: u.profilePicture || "",
+          status: u.status || (u.active === false || u.active === "false" ? "inactive" : "active"),
+          dateCreated: u.dateCreated || new Date().toISOString(),
+          tempPassword: u.tempPassword || "",
+          mustChangePassword: u.mustChangePassword !== undefined ? !!u.mustChangePassword : false,
+        };
+        firestoreUsers.push(mappedUser);
       }
     });
-    if (list.length > 0) {
-      localStorage.setItem("thulamela_crm_users", JSON.stringify(list));
+
+    const userMap = new Map<string, User>();
+    if (isDemoMode) {
+      SEED_USERS.forEach(u => userMap.set(u.id, u));
+    }
+    try {
+      const currentLocal = JSON.parse(localStorage.getItem("thulamela_crm_users") || "[]");
+      if (Array.isArray(currentLocal)) {
+        currentLocal.forEach((u: any) => {
+          if (u && u.id) userMap.set(u.id, { ...userMap.get(u.id), ...u });
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to parse current local users during snapshot merge:", e);
+    }
+
+    if (firestoreUsers.length > 0 || isDemoMode) {
+      firestoreUsers.forEach(u => userMap.set(u.id, { ...userMap.get(u.id), ...u }));
+      const mergedList = Array.from(userMap.values());
+      localStorage.setItem("thulamela_crm_users", JSON.stringify(mergedList));
       triggerDbUpdateEvent();
     }
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "users");
   });
+  activeSnapshotUnsubscribes.push(unsubUsers);
 
-  onSnapshot(collection(db, "complaints"), (snapshot) => {
+  const unsubComplaints = onSnapshot(collection(db, "complaints"), (snapshot) => {
     const list: Complaint[] = [];
     snapshot.forEach(doc => list.push(doc.data() as Complaint));
     if (list.length > 0) {
@@ -299,8 +453,9 @@ async function setupFirestoreListenersAndSync() {
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "complaints");
   });
+  activeSnapshotUnsubscribes.push(unsubComplaints);
 
-  onSnapshot(collection(db, "notifications"), (snapshot) => {
+  const unsubNotifications = onSnapshot(collection(db, "notifications"), (snapshot) => {
     const list: Notification[] = [];
     snapshot.forEach(doc => list.push(doc.data() as Notification));
     if (list.length > 0) {
@@ -310,8 +465,9 @@ async function setupFirestoreListenersAndSync() {
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "notifications");
   });
+  activeSnapshotUnsubscribes.push(unsubNotifications);
 
-  onSnapshot(collection(db, "announcements"), (snapshot) => {
+  const unsubAnnouncements = onSnapshot(collection(db, "announcements"), (snapshot) => {
     const list: Announcement[] = [];
     snapshot.forEach(doc => list.push(doc.data() as Announcement));
     if (list.length > 0) {
@@ -321,8 +477,9 @@ async function setupFirestoreListenersAndSync() {
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "announcements");
   });
+  activeSnapshotUnsubscribes.push(unsubAnnouncements);
 
-  onSnapshot(collection(db, "auditLogs"), (snapshot) => {
+  const unsubAuditLogs = onSnapshot(collection(db, "auditLogs"), (snapshot) => {
     const list: AuditLog[] = [];
     snapshot.forEach(doc => list.push(doc.data() as AuditLog));
     if (list.length > 0) {
@@ -332,8 +489,9 @@ async function setupFirestoreListenersAndSync() {
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "auditLogs");
   });
+  activeSnapshotUnsubscribes.push(unsubAuditLogs);
 
-  onSnapshot(collection(db, "serviceNotices"), (snapshot) => {
+  const unsubServiceNotices = onSnapshot(collection(db, "serviceNotices"), (snapshot) => {
     const list: ServiceNotice[] = [];
     snapshot.forEach(doc => list.push(doc.data() as ServiceNotice));
     localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(list));
@@ -341,12 +499,54 @@ async function setupFirestoreListenersAndSync() {
   }, (error) => {
     handleFirestoreError(error, OperationType.LIST, "serviceNotices");
   });
+  activeSnapshotUnsubscribes.push(unsubServiceNotices);
 }
 
 // Low-level Getters & Setters
 export function getUsers(): User[] {
-  const users = JSON.parse(localStorage.getItem("thulamela_crm_users") || "[]");
-  return Array.isArray(users) ? users.filter((u: any) => u && u.id && u.username && u.email) : [];
+  let users: any[] = [];
+  try {
+    users = JSON.parse(localStorage.getItem("thulamela_crm_users") || "[]");
+  } catch (e) {
+    users = [];
+  }
+  
+  const userMap = new Map<string, User>();
+  if (isDemoMode) {
+    SEED_USERS.forEach(u => userMap.set(u.id, u));
+  }
+  
+  if (Array.isArray(users)) {
+    users.forEach((u: any) => {
+      if (u && u.id) {
+        const username = u.username || u.email?.split("@")[0] || u.id.toLowerCase();
+        const email = u.email || `${username}@thulamela.gov.za`;
+        
+        const mapped: User = {
+          id: u.id,
+          name: u.name || "",
+          email: email,
+          phone: u.phone || "",
+          physicalAddress: u.physicalAddress || "",
+          username: username,
+          role: u.role || (u.superAdmin === true || u.superAdmin === "true" ? "super_admin" : "municipal_admin"),
+          employeeNumber: u.employeeNumber || "",
+          saIdNumber: u.saIdNumber || u["AC ID number"] || u["saIdNumber"] || "",
+          wardNumber: typeof u.wardNumber === "number" ? u.wardNumber : (u.wardNumber ? parseInt(u.wardNumber, 10) : undefined),
+          wardName: u.wardName || "",
+          politicalPosition: u.politicalPosition || "",
+          profilePicture: u.profilePicture || "",
+          status: u.status || (u.active === false || u.active === "false" ? "inactive" : "active"),
+          dateCreated: u.dateCreated || new Date().toISOString(),
+          tempPassword: u.tempPassword || "",
+          mustChangePassword: u.mustChangePassword !== undefined ? !!u.mustChangePassword : false,
+        };
+        userMap.set(u.id, { ...userMap.get(u.id), ...mapped });
+      }
+    });
+  }
+  
+  return Array.from(userMap.values());
 }
 
 export function saveUsers(users: User[]) {
@@ -452,6 +652,8 @@ export function saveAnnouncements(announcements: Announcement[]) {
   }
 }
 
+const syncedAuditLogIds = new Set<string>();
+
 export function getAuditLogs(): AuditLog[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_audit_logs") || "[]");
 }
@@ -459,11 +661,16 @@ export function getAuditLogs(): AuditLog[] {
 export function saveAuditLogs(logs: AuditLog[]) {
   localStorage.setItem("thulamela_crm_audit_logs", JSON.stringify(logs));
   if (isFirebaseEnabled && db) {
-    logs.forEach(async (l) => {
+    const unsyncedLogs = logs.filter(l => !syncedAuditLogIds.has(l.id));
+    unsyncedLogs.forEach(async (l) => {
+      syncedAuditLogIds.add(l.id);
       try {
         await setDoc(doc(db, "auditLogs", l.id), l);
-      } catch (err) {
-        console.warn("Firestore sync audit logs skipped/failed (expected if unauthorized or offline):", err);
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        if (!errMsg.includes("permission") && !errMsg.includes("insufficient") && !errMsg.includes("unauthenticated")) {
+          console.warn("Firestore sync audit log skipped/failed:", errMsg);
+        }
       }
     });
   }
@@ -478,8 +685,12 @@ export function getCurrentUser(): User | null {
 export function setCurrentUser(user: User | null) {
   if (user) {
     localStorage.setItem("thulamela_crm_current_user", JSON.stringify(user));
+    if (user.role === "super_admin" || user.role === "municipal_admin") {
+      triggerAdminSeedingIfAuthorized();
+    }
   } else {
     localStorage.removeItem("thulamela_crm_current_user");
+    cleanupFirestoreListeners();
   }
 }
 

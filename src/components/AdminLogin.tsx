@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { Lock, User as UserIcon, ShieldAlert, KeyRound, Eye, EyeOff, Terminal } from "lucide-react";
-import { getUsers, setCurrentUser, addAuditLog } from "../db";
+import { getUsers, setCurrentUser, addAuditLog, getSyncStatus } from "../db";
 import { User } from "../types";
 import { isFirebaseEnabled, auth } from "../firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
 
 interface AdminLoginProps {
   onLoginSuccess: (user: User) => void;
@@ -27,20 +27,41 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
     setLoading(true);
 
     try {
+      const enteredVal = username.trim().toLowerCase().replace(/\s+/g, ""); // ignores all accidental spaces and casing
+      
+      console.log(`[LOGIN ATTEMPT]: Initiating administrative login search. Search query (normalized): "${enteredVal}"`);
+      
+      const dbStatus = getSyncStatus();
+      console.log(`[FIRESTORE QUERY STATUS]: Real-time sync status is currently: "${dbStatus}"`);
+
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine || dbStatus === "offline";
+      if (isOffline) {
+        console.error(`[FIRESTORE UNREACHABLE]: Secure database is unreachable. Cannot verify identifier "${username.trim()}".`);
+        setLoading(false);
+        onAddToast("Authentication Failed", "Unable to connect to the CRM database", "error");
+        return;
+      }
+      
       const users = Array.isArray(getUsers()) ? getUsers() : [];
-      const enteredVal = username.toLowerCase().trim();
+      console.log(`[DATABASE QUERY]: Successfully retrieved ${users.length} total active users from database.`);
 
       const matchedUser = users.find(
         (u) =>
-          (u.username || "").toLowerCase().trim() === enteredVal ||
-          (u.email || "").toLowerCase().trim() === enteredVal ||
-          (u.name || "").toLowerCase().trim() === enteredVal ||
-          (u.id || "").toLowerCase().trim() === enteredVal
+          (u.username || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal ||
+          (u.email || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal ||
+          (u.id || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal ||
+          (u.employeeNumber || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal
       );
+
+      if (matchedUser) {
+        console.log(`[LOGIN MATCH FOUND]: User matching identifier "${enteredVal}" was found! Name: "${matchedUser.name}", ID: "${matchedUser.id}", Role: "${matchedUser.role}"`);
+      } else {
+        console.warn(`[LOGIN MATCH FAILED]: No user registered under identifier "${enteredVal}" inside user database.`);
+      }
 
       if (!matchedUser) {
         setLoading(false);
-        onAddToast("Authentication Failed", "Username or account ID not registered in the administrative database.", "error");
+        onAddToast("Authentication Failed", "Username not found", "error");
         return;
       }
 
@@ -52,46 +73,74 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
 
       if (matchedUser.status !== "active") {
         setLoading(false);
-        onAddToast("Account Suspended", "This staff account is currently deactivated. Contact Vhembe IT support.", "error");
+        onAddToast("Authentication Failed", "Account is inactive", "error");
         return;
       }
 
       if (isFirebaseEnabled && auth) {
+        let hasAuthAccount = false;
+        try {
+          // Check server-side first to bypass email enumeration protection issues cleanly
+          const checkRes = await fetch("/api/auth/check-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: matchedUser.email })
+          });
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            hasAuthAccount = !!checkData.exists;
+          } else {
+            hasAuthAccount = true; // Fallback
+          }
+        } catch (fetchErr: any) {
+          console.warn("[FIRESTORE WARNING]: Could not connect to the check-status endpoint, using local fallback.");
+          hasAuthAccount = true;
+        }
+
+        if (!hasAuthAccount) {
+          setLoading(false);
+          onAddToast("Authentication Failed", "Firebase authentication account is not configured", "error");
+          return;
+        }
+
         try {
           await signInWithEmailAndPassword(auth, matchedUser.email, password);
         } catch (err: any) {
-          if (
-            err.code === "auth/user-not-found" ||
-            err.code === "auth/invalid-credential" ||
-            err.message?.includes("user-not-found") ||
-            err.message?.includes("invalid-credential")
-          ) {
-            try {
-              await createUserWithEmailAndPassword(auth, matchedUser.email, password);
-            } catch (createErr: any) {
-              if (createErr.code === "auth/email-already-in-use") {
-                setLoading(false);
-                onAddToast("Authentication Failed", "Incorrect password for this account.", "error");
-                return;
-              } else if (createErr.code === "auth/weak-password") {
-                setLoading(false);
-                onAddToast("Authentication Failed", "Password must be at least 6 characters.", "error");
-                return;
-              } else {
-                setLoading(false);
-                onAddToast("Authentication Failed", `Authentication error: ${createErr.message}`, "error");
-                return;
-              }
-            }
-          } else {
+          const isNetworkError = err.message?.includes("network") || err.code?.includes("network") || err.message?.includes("unavailable") || err.code?.includes("unavailable") || err.message?.includes("offline");
+          if (isNetworkError) {
+            console.error("[FIRESTORE UNREACHABLE]: Firebase Auth server could not be reached. Connection error:", err.message);
             setLoading(false);
-            onAddToast("Authentication Failed", `Incorrect password or authentication error: ${err.message}`, "error");
+            onAddToast("Authentication Failed", "Unable to connect to the CRM database", "error");
             return;
           }
+
+          if (
+            err.code === "auth/user-not-found" ||
+            err.message?.includes("user-not-found")
+          ) {
+            setLoading(false);
+            onAddToast("Authentication Failed", "Firebase authentication account is not configured", "error");
+            return;
+          }
+
+          if (
+            err.code === "auth/wrong-password" ||
+            err.code === "auth/invalid-credential" ||
+            err.message?.includes("wrong-password") ||
+            err.message?.includes("invalid-credential")
+          ) {
+            setLoading(false);
+            onAddToast("Authentication Failed", "Incorrect password", "error");
+            return;
+          }
+
+          setLoading(false);
+          onAddToast("Authentication Failed", `Authentication error: ${err.message}`, "error");
+          return;
         }
       } else {
         setLoading(false);
-        onAddToast("Authentication Failed", "Authentication service is currently offline.", "error");
+        onAddToast("Authentication Failed", "Unable to connect to the CRM database", "error");
         return;
       }
 

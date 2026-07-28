@@ -66,6 +66,8 @@ function ProtectedRoute({
   return <>{children}</>;
 }
 
+const knownUnlinkedUids = new Set<string>();
+
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,6 +84,10 @@ export default function App() {
         if (firebaseUser) {
           if (firebaseUser.isAnonymous) {
             console.log("Anonymous session active for synchronization.");
+            return;
+          }
+          if (knownUnlinkedUids.has(firebaseUser.uid)) {
+            // Already checked this UID; gracefully treat as unlinked Auth account
             return;
           }
           try {
@@ -111,9 +117,8 @@ export default function App() {
               setCurrentUserState(matched);
               setCurrentUser(matched);
             } else {
-              console.warn("No Firestore document found directly for UID:", firebaseUser.uid, "Checking local profile cache...");
               const users = getUsers();
-              let matched = users.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
+              let matched = users.find(u => u.email && firebaseUser.email && u.email.toLowerCase() === firebaseUser.email.toLowerCase());
               if (matched) {
                 if (matched.id !== firebaseUser.uid) {
                   migrateUserId(matched.id, firebaseUser.uid);
@@ -126,16 +131,17 @@ export default function App() {
                   return;
                 }
               }
-              addToast("Authentication Failed", "No profile registered for this account.", "error");
-              auth.signOut();
+              // Mark UID as unlinked so we do not repeatedly retry or spam error messages
+              knownUnlinkedUids.add(firebaseUser.uid);
+              console.info(`[AUTH]: Firebase Auth UID ${firebaseUser.uid} has no associated CRM profile. Treating as unlinked Auth account.`);
               setCurrentUserState(null);
               setCurrentUser(null);
             }
           } catch (err: any) {
-            console.error("Error fetching user profile:", err);
+            console.warn("Could not fetch user profile from Firestore, attempting local cache fallback:", err?.message || err);
             // Fallback to local storage cache matching
             const users = getUsers();
-            let matched = users.find(u => u.email.toLowerCase() === firebaseUser.email?.toLowerCase());
+            let matched = users.find(u => u.email && firebaseUser.email && u.email.toLowerCase() === firebaseUser.email.toLowerCase());
             if (matched) {
               if (matched.id !== firebaseUser.uid) {
                 migrateUserId(matched.id, firebaseUser.uid);
@@ -147,8 +153,7 @@ export default function App() {
                 setCurrentUser(matched);
               }
             } else {
-              addToast("Authentication Error", "Could not synchronize secure staff profile.", "error");
-              auth.signOut();
+              knownUnlinkedUids.add(firebaseUser.uid);
               setCurrentUserState(null);
               setCurrentUser(null);
             }

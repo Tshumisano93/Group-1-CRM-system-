@@ -9,9 +9,11 @@ import {
   addAuditLog, 
   getDepartments,
   addNotification,
-  getSyncStatus
+  getSyncStatus,
+  getChatRooms,
+  saveChatRooms
 } from "../db";
-import { User, Complaint, Notification, Department, Ward, ComplaintStatus, ComplaintPriority } from "../types";
+import { User, Complaint, Notification, Department, Ward, ComplaintStatus, ComplaintPriority, ChatRoom } from "../types";
 import { 
   LayoutDashboard, 
   FileText, 
@@ -72,6 +74,7 @@ export default function CouncillorDashboard({
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+  const [activeChatRoomId, setActiveChatRoomId] = useState<string>("");
 
   // Form State for Lodging Complaint
   const [compTitle, setCompTitle] = useState("");
@@ -424,6 +427,30 @@ export default function CouncillorDashboard({
     setNewComment("");
     onAddToast("Comment Posted", "Your feedback message has been attached to the case history.", "success");
     loadCrmData();
+  };
+
+  const handleStartTechnicianChat = (complaint: Complaint) => {
+    if (!complaint.assignedTechnicianId) return;
+    const allRooms = getChatRooms();
+    const roomId = `room-complaint-${complaint.id}`;
+    const roomName = `Feedback: ${complaint.id} (${complaint.assignedTechnicianName})`;
+    
+    const existing = allRooms.find(r => r.id === roomId);
+    if (!existing) {
+      const newRoom: ChatRoom = {
+        id: roomId,
+        name: roomName,
+        type: "direct",
+        participants: [currentUser.id, complaint.assignedTechnicianId],
+        complaintId: complaint.id,
+        lastMessage: "Complaint feedback channel initiated.",
+        lastMessageTime: new Date().toISOString()
+      };
+      saveChatRooms([newRoom, ...allRooms]);
+    }
+    setActiveChatRoomId(roomId);
+    setActiveTab("chat");
+    setSelectedComplaint(null);
   };
 
   const handleVerifyComplaint = (complaintId: string, approved: boolean) => {
@@ -1937,7 +1964,11 @@ export default function CouncillorDashboard({
         )}
 
         {activeTab === "chat" && (
-          <InternalChat currentUser={currentUser} onAddToast={onAddToast} />
+          <InternalChat 
+            currentUser={currentUser} 
+            onAddToast={onAddToast} 
+            initialActiveRoomId={activeChatRoomId}
+          />
         )}
 
         {activeTab === "calendar" && (
@@ -1998,30 +2029,37 @@ export default function CouncillorDashboard({
                   </span>
                 </div>
 
-                {currentUser.role !== "councillor" && (
-                  <>
-                    <div>
-                      <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Assigned Field Staff</span>
-                      <p className="text-xs font-bold text-slate-900 mt-1">
-                        {selectedComplaint.assignedTechnicianName || "Awaiting Dispatch"}
-                      </p>
-                    </div>
+                <div>
+                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Assigned Field Staff</span>
+                  <div className="flex flex-col items-start mt-1">
+                    <p className="text-xs font-bold text-slate-900">
+                      {selectedComplaint.assignedTechnicianName || "Awaiting Dispatch"}
+                    </p>
+                    {selectedComplaint.assignedTechnicianId && (
+                      <button
+                        onClick={() => handleStartTechnicianChat(selectedComplaint)}
+                        className="mt-1.5 flex items-center space-x-1 px-2 py-1 bg-gov-green hover:bg-gov-green-hover text-white rounded text-[10px] font-bold transition-all shadow-sm"
+                      >
+                        <MessageSquare size={10} />
+                        <span>Chat feedback</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-                    <div>
-                      <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">SLA Priority</span>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold ${getPriorityBadge(selectedComplaint.priority)}`}>
-                        {selectedComplaint.priority}
-                      </span>
-                    </div>
+                <div>
+                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">SLA Priority</span>
+                  <span className={`inline-block mt-1 px-2.5 py-0.5 rounded text-[10px] font-bold ${getPriorityBadge(selectedComplaint.priority)}`}>
+                    {selectedComplaint.priority}
+                  </span>
+                </div>
 
-                    <div>
-                      <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Disaster Level</span>
-                      <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 font-black rounded text-[10px] uppercase">
-                        {selectedComplaint.emergencyLevel || "Medium"}
-                      </span>
-                    </div>
-                  </>
-                )}
+                <div>
+                  <span className="text-[9px] uppercase text-slate-400 font-bold tracking-wider block font-mono">Disaster Level</span>
+                  <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 font-black rounded text-[10px] uppercase">
+                    {selectedComplaint.emergencyLevel || "Medium"}
+                  </span>
+                </div>
               </div>
 
               {/* SERVICE CLASSIFICATION & DESCRIPTION */}

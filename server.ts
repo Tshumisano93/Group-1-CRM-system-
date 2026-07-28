@@ -7,6 +7,7 @@ import admin from "firebase-admin";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -84,6 +85,31 @@ const PORT = 3000;
 // API routes FIRST
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
+});
+
+// Check if a Firebase Auth user profile exists for an email address
+app.post("/api/auth/check-status", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required." });
+    }
+
+    try {
+      const authInstance = getAdminAuth();
+      await authInstance.getUserByEmail(email.trim().toLowerCase());
+      return res.json({ exists: true });
+    } catch (authErr: any) {
+      if (authErr.code === "auth/user-not-found" || authErr.message?.includes("user-not-found")) {
+        return res.json({ exists: false });
+      }
+      throw authErr;
+    }
+  } catch (err: any) {
+    console.warn("Could not check account status server-side (using default fallback true):", err.message);
+    // Return exists: true as fallback if Firebase Admin is unconfigured/offline
+    return res.json({ exists: true, warning: "Admin SDK bypassed or offline" });
+  }
 });
 
 // Helper to verify Admin ID Token and check if the user is an authorized admin
@@ -414,11 +440,91 @@ Return your response as a JSON object:
   }
 });
 
+// Automatic account syncing & provisioning on server startup
+async function autoProvisionAuthUsers() {
+  try {
+    ensureFirebaseInitialized();
+    if (!isFirebaseInitialized) {
+      console.log("[AUTH PROVISION]: Firebase is not initialized. Skipping automatic account linking.");
+      return;
+    }
+
+    console.log("[AUTH PROVISION]: Scanning Firestore users collection for account linking...");
+    const adminDb = getAdminDb();
+    const adminAuth = getAdminAuth();
+
+    const usersSnap = await adminDb.collection("users").get();
+    if (usersSnap.empty) {
+      console.log("[AUTH PROVISION]: Firestore 'users' collection is empty. Skipping account linking.");
+      return;
+    }
+
+    console.log(`[AUTH PROVISION]: Found ${usersSnap.size} Firestore users. Verifying Authentication synchronization...`);
+    let synced = 0;
+    let provisioned = 0;
+
+    const devUsernames = ["superadmin", "munadmin", "cllr1", "cllr2", "cllr5", "tech1", "tech2"];
+
+    for (const userDoc of usersSnap.docs) {
+      const u = userDoc.data();
+      const email = u.email;
+      if (!email) continue;
+
+      const normalizedEmail = email.trim().toLowerCase();
+      const username = (u.username || "").trim().toLowerCase();
+      const isDevUser = devUsernames.includes(username);
+
+      let existingUser: any = null;
+      try {
+        existingUser = await adminAuth.getUserByEmail(normalizedEmail);
+      } catch (err: any) {
+        if (err.code !== "auth/user-not-found" && !err.message?.includes("user-not-found")) {
+          console.error(`[AUTH PROVISION ERROR]: Failed checking email ${email}:`, err);
+          continue;
+        }
+      }
+
+      if (existingUser) {
+        // Account exists
+        if (isDevUser) {
+          // Keep development password in sync for ease of development testing
+          await adminAuth.updateUser(existingUser.uid, {
+            password: "Thulamela@2026"
+          });
+          console.log(`[AUTH PROVISION]: Updated existing development user "${username}" (${normalizedEmail}) password to Thulamela@2026`);
+        } else {
+          console.log(`[AUTH PROVISION]: Account already exists for "${username}" (${normalizedEmail}), left untouched.`);
+        }
+        synced++;
+      } else {
+        // Account is missing, securely create it with matching UID
+        const password = isDevUser ? "Thulamela@2026" : (crypto.randomBytes(16).toString("hex") + "Thul@2026!");
+        await adminAuth.createUser({
+          uid: userDoc.id,
+          email: normalizedEmail,
+          password: password,
+          displayName: u.name || u.username || "Thulamela User"
+        });
+
+        console.log(`[AUTH PROVISION]: Created missing Auth user for "${username}" (${normalizedEmail}) with matching UID ${userDoc.id}`);
+        provisioned++;
+      }
+    }
+
+    console.log(`[AUTH PROVISION COMPLETE]: Checked ${usersSnap.size} users. Synced/Updated: ${synced}, Provisioned: ${provisioned}`);
+  } catch (err: any) {
+    console.warn("[AUTH PROVISION SKIP]: Skipping auto-provision (likely local/unauthorized environment):", err.message);
+  }
+}
+
 // Vite middleware for development or Static Asset serving for production
 async function start() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === "true" ? false : false,
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -432,6 +538,10 @@ async function start() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    // Run auth provisioning asynchronously on start
+    autoProvisionAuthUsers().catch(err => {
+      console.warn("Failed executing background auth provisioning:", err);
+    });
   });
 }
 

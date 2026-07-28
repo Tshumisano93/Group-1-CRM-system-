@@ -230,23 +230,64 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    function isComplaintRelatedChat(room, userId) {
+      return 'complaintId' in room && 
+             exists(/databases/$(database)/documents/complaints/$(room.complaintId)) &&
+             (
+               get(/databases/$(database)/documents/complaints/$(room.complaintId)).data.reporterId == userId ||
+               get(/databases/$(database)/documents/complaints/$(room.complaintId)).data.assignedTechnicianId == userId
+             );
+    }
+
+    function getOtherParticipantId(room, myId) {
+      return room.participants[0] == myId ? room.participants[1] : room.participants[0];
+    }
+
+    function isDirectChatRoomAllowed(room) {
+      return room.participants.size() == 2 &&
+             room.participants.hasAll([request.auth.uid]) &&
+             exists(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))) &&
+             (
+               (getUserRole() == 'councillor' && (
+                 get(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))).data.role == 'councillor' ||
+                 (get(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))).data.role == 'technician' && isComplaintRelatedChat(room, request.auth.uid))
+               )) ||
+               (getUserRole() == 'technician' && (
+                 get(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))).data.role == 'technician' ||
+                 (get(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))).data.role == 'councillor' && isComplaintRelatedChat(room, request.auth.uid))
+               )) ||
+               ((getUserRole() == 'super_admin' || getUserRole() == 'municipal_admin') && (
+                 get(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))).data.role == 'super_admin' ||
+                 get(/databases/$(database)/documents/users/$(getOtherParticipantId(room, request.auth.uid))).data.role == 'municipal_admin'
+               ))
+             );
+    }
+
     function isRoomParticipant(roomId) {
       return isSignedIn() && (
         isAdmin() ||
         (exists(/databases/$(database)/documents/chatRooms/$(roomId)) &&
-         get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants.hasAny([request.auth.uid]))
+         get(/databases/$(database)/documents/chatRooms/$(roomId)).data.participants.hasAny([request.auth.uid]) &&
+         (get(/databases/$(database)/documents/chatRooms/$(roomId)).data.type != 'direct' || 
+          isDirectChatRoomAllowed(get(/databases/$(database)/documents/chatRooms/$(roomId)).data)))
       );
     }
 
     match /chatRooms/{roomId} {
       allow read: if isSignedIn() && (
-        resource.data.participants.hasAny([request.auth.uid]) || isAdmin()
+        isAdmin() ||
+        (resource.data.participants.hasAny([request.auth.uid]) && 
+         (resource.data.type != 'direct' || isDirectChatRoomAllowed(resource.data)))
       );
       allow create: if isSignedIn() && isValidId(roomId) && isValidChatRoom(incoming()) && (
-        incoming().participants.hasAny([request.auth.uid]) || isAdmin()
+        isAdmin() ||
+        (incoming().participants.hasAny([request.auth.uid]) && 
+         (incoming().type != 'direct' || isDirectChatRoomAllowed(incoming())))
       );
       allow update: if isSignedIn() && isValidId(roomId) && isValidChatRoom(incoming()) && (
-        existing().participants.hasAny([request.auth.uid]) || isAdmin()
+        isAdmin() ||
+        (existing().participants.hasAny([request.auth.uid]) && 
+         (incoming().type != 'direct' || isDirectChatRoomAllowed(incoming())))
       );
       allow delete: if isAdmin();
     }

@@ -5,6 +5,7 @@ import {
   getChatMessages, 
   saveChatMessages, 
   getUsers,
+  getComplaints,
   addAuditLog 
 } from "../db";
 import { User, ChatRoom, ChatMessage, UserRole } from "../types";
@@ -33,9 +34,10 @@ import {
 interface InternalChatProps {
   currentUser: User;
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
+  initialActiveRoomId?: string;
 }
 
-export default function InternalChat({ currentUser, onAddToast }: InternalChatProps) {
+export default function InternalChat({ currentUser, onAddToast, initialActiveRoomId }: InternalChatProps) {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -56,15 +58,99 @@ export default function InternalChat({ currentUser, onAddToast }: InternalChatPr
     const loadedRooms = getChatRooms();
     const loadedMessages = getChatMessages();
     const loadedUsers = getUsers().filter(u => u.id !== currentUser.id && u.status === "active");
+    const complaints = getComplaints();
     
-    setRooms(loadedRooms);
+    // 1. Filter Users (Municipal Directory)
+    let filteredUsers: User[] = [];
+    if (currentUser.role === "councillor") {
+      const assignedTechIds = complaints
+        .filter(c => c.reporterId === currentUser.id && c.assignedTechnicianId)
+        .map(c => c.assignedTechnicianId);
+      
+      filteredUsers = loadedUsers.filter(u => 
+        u.role === "councillor" || 
+        (u.role === "technician" && assignedTechIds.includes(u.id))
+      );
+    } else if (currentUser.role === "technician") {
+      const assignedCouncillorIds = complaints
+        .filter(c => c.assignedTechnicianId === currentUser.id)
+        .map(c => c.reporterId);
+      
+      filteredUsers = loadedUsers.filter(u => 
+        u.role === "technician" || 
+        (u.role === "councillor" && assignedCouncillorIds.includes(u.id))
+      );
+    } else if (currentUser.role === "municipal_admin" || currentUser.role === "super_admin") {
+      filteredUsers = loadedUsers.filter(u => 
+        u.role === "super_admin" || u.role === "municipal_admin"
+      );
+    } else {
+      filteredUsers = loadedUsers;
+    }
+
+    // 2. Filter Rooms (Active Channels)
+    const allUsers = getUsers();
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+    
+    const filteredRoomsList = loadedRooms.filter(r => {
+      // Must be a participant
+      if (!r.participants.includes(currentUser.id)) return false;
+      
+      // Group/broadcast rooms that they are in are always visible
+      if (r.type !== "direct") return true;
+      
+      // For direct rooms, check other participant's role and rules
+      const otherId = r.participants.find(p => p !== currentUser.id);
+      if (!otherId) return false;
+      
+      const otherUser = userMap.get(otherId);
+      if (!otherUser) return false;
+      
+      if (currentUser.role === "councillor") {
+        if (otherUser.role === "councillor") return true;
+        if (otherUser.role === "technician") {
+          return complaints.some(c => 
+            c.reporterId === currentUser.id && 
+            c.assignedTechnicianId === otherUser.id
+          );
+        }
+        return false;
+      }
+      
+      if (currentUser.role === "technician") {
+        if (otherUser.role === "technician") return true;
+        if (otherUser.role === "councillor") {
+          return complaints.some(c => 
+            c.assignedTechnicianId === currentUser.id && 
+            c.reporterId === otherUser.id
+          );
+        }
+        return false;
+      }
+      
+      if (currentUser.role === "municipal_admin" || currentUser.role === "super_admin") {
+        return otherUser.role === "super_admin" || otherUser.role === "municipal_admin";
+      }
+      
+      return true;
+    });
+
+    setRooms(filteredRoomsList);
     setMessages(loadedMessages);
-    setUsers(loadedUsers);
+    setUsers(filteredUsers);
     
-    if (loadedRooms.length > 0 && !activeRoomId) {
-      setActiveRoomId(loadedRooms[0].id);
+    if (initialActiveRoomId) {
+      setActiveRoomId(initialActiveRoomId);
+    } else if (filteredRoomsList.length > 0 && !activeRoomId) {
+      setActiveRoomId(filteredRoomsList[0].id);
     }
   };
+
+  useEffect(() => {
+    if (initialActiveRoomId) {
+      setActiveRoomId(initialActiveRoomId);
+    }
+  }, [initialActiveRoomId]);
 
   useEffect(() => {
     loadChatData();

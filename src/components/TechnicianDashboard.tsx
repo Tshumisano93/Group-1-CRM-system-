@@ -6,9 +6,11 @@ import {
   saveTechnicians, 
   addAuditLog, 
   addNotification,
-  getSyncStatus
+  getSyncStatus,
+  getChatRooms,
+  saveChatRooms
 } from "../db";
-import { User, Complaint, Technician, ComplaintLog, ComplaintComment, ComplaintStatus, ComplaintPriority, UserRole } from "../types";
+import { User, Complaint, Technician, ComplaintLog, ComplaintComment, ComplaintStatus, ComplaintPriority, UserRole, ChatRoom } from "../types";
 import { Skeleton, SkeletonCard, DashboardSkeleton } from "./Skeleton";
 import { 
   LayoutDashboard,
@@ -68,6 +70,7 @@ export default function TechnicianDashboard({
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+  const [activeChatRoomId, setActiveChatRoomId] = useState<string>("");
   const [techProfile, setTechProfile] = useState<Technician | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -584,6 +587,30 @@ export default function TechnicianDashboard({
     const match = updated.find(c => c.id === complaintId);
     if (match) setSelectedComplaint(match);
     loadTechData();
+  };
+
+  const handleStartCouncillorChat = (complaint: Complaint) => {
+    if (!complaint.reporterId) return;
+    const allRooms = getChatRooms();
+    const roomId = `room-complaint-${complaint.id}`;
+    const roomName = `Feedback: ${complaint.id} (Councillor ${complaint.reporterName || "Reporter"})`;
+    
+    const existing = allRooms.find(r => r.id === roomId);
+    if (!existing) {
+      const newRoom: ChatRoom = {
+        id: roomId,
+        name: roomName,
+        type: "direct",
+        participants: [currentUser.id, complaint.reporterId],
+        complaintId: complaint.id,
+        lastMessage: "Complaint feedback channel initiated.",
+        lastMessageTime: new Date().toISOString()
+      };
+      saveChatRooms([newRoom, ...allRooms]);
+    }
+    setActiveChatRoomId(roomId);
+    setActiveTab("chat");
+    setSelectedComplaint(null);
   };
 
   const activeJobsCount = complaints.filter(c => c.status !== "Resolved" && c.status !== "Closed" && c.status !== "Rejected" && c.status !== "Cancelled").length;
@@ -1169,7 +1196,11 @@ export default function TechnicianDashboard({
         )}
 
         {activeTab === "chat" && (
-          <InternalChat currentUser={currentUser} onAddToast={onAddToast} />
+          <InternalChat 
+            currentUser={currentUser} 
+            onAddToast={onAddToast} 
+            initialActiveRoomId={activeChatRoomId}
+          />
         )}
 
         {activeTab === "calendar" && (
@@ -1300,6 +1331,15 @@ export default function TechnicianDashboard({
                 <div>
                   <span className="text-[9px] uppercase text-slate-400 block tracking-wider font-mono">Reporting Councillor</span>
                   <p className="text-slate-900 mt-1">{selectedComplaint.reporterName}</p>
+                  {selectedComplaint.reporterId && (
+                    <button
+                      onClick={() => handleStartCouncillorChat(selectedComplaint)}
+                      className="mt-1.5 flex items-center space-x-1 px-2 py-1 bg-gov-green hover:bg-gov-green-hover text-white rounded text-[10px] font-bold transition-all shadow-sm"
+                    >
+                      <MessageSquare size={10} />
+                      <span>Chat feedback</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

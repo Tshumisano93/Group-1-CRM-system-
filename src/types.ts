@@ -207,6 +207,7 @@ export interface ChatRoom {
   type: "direct" | "group" | "broadcast";
   participants: string[]; // List of user IDs
   departmentId?: string; // For department group chats
+  complaintId?: string; // For complaint feedback chat rooms
   pinnedBy?: string[]; // list of user IDs who pinned this chat
   archivedBy?: string[]; // list of user IDs who archived this chat
   lastMessage?: string;
