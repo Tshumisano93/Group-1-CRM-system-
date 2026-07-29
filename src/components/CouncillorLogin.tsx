@@ -166,12 +166,6 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
     }
   };
 
-  const handleAutofill = (usernameVal: string) => {
-    setUsername(usernameVal);
-    setPassword("");
-    onAddToast("Credentials Preloaded", `Selected ${usernameVal}. Please enter your correct account password to login.`, "info");
-  };
-
   return (
     <div id="councillor-login-view" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center max-w-5xl mx-auto">
@@ -312,48 +306,6 @@ export default function CouncillorLogin({ onLoginSuccess, onNavigate, onAddToast
             <p className="text-xs text-slate-600 leading-relaxed">
               This secure portal is strictly reserved for registered Thulamela Ward Councillors. Upon logging in, you will be directed to your local ward cockpit to lodge community complaints, view assigned technicians, and track SLAs.
             </p>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <h4 className="text-[10px] uppercase font-bold text-gov-blue font-sans tracking-wider">
-                Testing Demo Credentials (Autofill Helper)
-              </h4>
-              <p className="text-[10px] text-slate-500">
-                To test the specific councillor dashboards instantly without typing, click any councillor button below to pre-load credentials:
-              </p>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                <button
-                  id="autofill-cllr1"
-                  type="button"
-                  onClick={() => handleAutofill("cllr1")}
-                  className="bg-white hover:bg-slate-50 text-slate-800 p-2.5 rounded-lg text-left transition-all border border-slate-200 flex flex-col justify-between hover:border-gov-blue hover:shadow-sm"
-                >
-                  <span className="font-bold">Cllr A. Radzilani</span>
-                  <span className="text-[9px] text-slate-500 font-mono mt-0.5">cllr1 • Ward 1 (Makwarela)</span>
-                </button>
-
-                <button
-                  id="autofill-cllr2"
-                  type="button"
-                  onClick={() => handleAutofill("cllr2")}
-                  className="bg-white hover:bg-slate-50 text-slate-800 p-2.5 rounded-lg text-left transition-all border border-slate-200 flex flex-col justify-between hover:border-gov-blue hover:shadow-sm"
-                >
-                  <span className="font-bold">Cllr M. Nemudzivhadi</span>
-                  <span className="text-[9px] text-slate-500 font-mono mt-0.5">cllr2 • Ward 2 (Sibasa)</span>
-                </button>
-
-                <button
-                  id="autofill-cllr5"
-                  type="button"
-                  onClick={() => handleAutofill("cllr5")}
-                  className="bg-white hover:bg-slate-50 text-slate-800 p-2.5 rounded-lg text-left transition-all border border-slate-200 flex flex-col justify-between hover:border-gov-blue hover:shadow-sm"
-                >
-                  <span className="font-bold">Cllr K. Rambuda</span>
-                  <span className="text-[9px] text-slate-500 font-mono mt-0.5">cllr5 • Ward 5 (Maniini)</span>
-                </button>
-              </div>
-              <div className="text-[10px] text-slate-400 text-center font-mono pt-1">SECURE CLIENT TRANSIT ACTIVATED</div>
-            </div>
           </div>
         </div>
 

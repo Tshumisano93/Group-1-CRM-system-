@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Lock, User as UserIcon, ShieldAlert, KeyRound, Eye, EyeOff, Terminal } from "lucide-react";
+import { Lock, User as UserIcon, ShieldAlert, KeyRound, Eye, EyeOff } from "lucide-react";
 import { getUsers, setCurrentUser, addAuditLog, getSyncStatus } from "../db";
 import { User } from "../types";
 import { isFirebaseEnabled, auth } from "../firebase";
@@ -167,12 +167,6 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
     }
   };
 
-  const handleAutofill = (usernameVal: string) => {
-    setUsername(usernameVal);
-    setPassword("");
-    onAddToast("Credentials Preloaded", `Preloaded ${usernameVal}. Please enter the correct account password to login.`, "info");
-  };
-
   return (
     <div id="admin-login-view" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center max-w-5xl mx-auto">
@@ -253,57 +247,6 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
             <p className="text-xs text-slate-600 leading-relaxed">
               This digital segment hosts the executive dashboards for Super Admins, Departmental Admins, and dispatch Technicians. Action entries are audited in accordance with the municipal information governance protocols.
             </p>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <h4 className="text-[10px] uppercase font-bold text-gov-blue font-mono tracking-wider flex items-center">
-                <Terminal size={12} className="mr-1.5" /> LDAP Testing Presets (Autofill)
-              </h4>
-              <p className="text-[10px] text-slate-500">
-                To test the comprehensive roles, click any staff card below to pre-load credentials:
-              </p>
-              
-              <div className="space-y-2 text-[11px]">
-                <button
-                  id="autofill-superadmin"
-                  type="button"
-                  onClick={() => handleAutofill("superadmin")}
-                  className="w-full bg-white hover:bg-slate-50 text-slate-800 p-2.5 rounded-lg text-left transition-all border border-slate-200 flex justify-between items-center"
-                >
-                  <div>
-                    <span className="font-bold block">Super Administrator (Thilivhali M.)</span>
-                    <span className="text-[9px] text-slate-400 font-mono mt-0.5">superadmin • Complete governance & ward control</span>
-                  </div>
-                  <span className="bg-red-100 text-red-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">SUPER</span>
-                </button>
-
-                <button
-                  id="autofill-munadmin"
-                  type="button"
-                  onClick={() => handleAutofill("munadmin")}
-                  className="w-full bg-white hover:bg-slate-50 text-slate-800 p-2.5 rounded-lg text-left transition-all border border-slate-200 flex justify-between items-center"
-                >
-                  <div>
-                    <span className="font-bold block">Municipal Admin (Tshifhiwa N.)</span>
-                    <span className="text-[9px] text-slate-400 font-mono mt-0.5">munadmin • Dispatches tech & monitors complaints</span>
-                  </div>
-                  <span className="bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">ADMIN</span>
-                </button>
-
-                <button
-                  id="autofill-tech1"
-                  type="button"
-                  onClick={() => handleAutofill("tech1")}
-                  className="w-full bg-white hover:bg-slate-50 text-slate-800 p-2.5 rounded-lg text-left transition-all border border-slate-200 flex justify-between items-center"
-                >
-                  <div>
-                    <span className="font-bold block">Field Technician (Vhonani M.)</span>
-                    <span className="text-[9px] text-slate-400 font-mono mt-0.5">tech1 • Solves water supply tickets & adds logs</span>
-                  </div>
-                  <span className="bg-amber-100 text-slate-800 font-bold px-1.5 py-0.5 rounded text-[8px] uppercase">TECH</span>
-                </button>
-              </div>
-              <div className="text-[10px] text-slate-500 text-center font-mono">SECURE TRANSIT SSL ACTIVATED</div>
-            </div>
           </div>
         </div>
 
