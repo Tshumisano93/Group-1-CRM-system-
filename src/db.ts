@@ -500,6 +500,96 @@ async function setupFirestoreListenersAndSync() {
     handleFirestoreError(error, OperationType.LIST, "serviceNotices");
   });
   activeSnapshotUnsubscribes.push(unsubServiceNotices);
+
+  const unsubWards = onSnapshot(collection(db, "wards"), (snapshot) => {
+    const list: Ward[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as Ward));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_wards", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "wards"));
+  activeSnapshotUnsubscribes.push(unsubWards);
+
+  const unsubDepts = onSnapshot(collection(db, "departments"), (snapshot) => {
+    const list: Department[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as Department));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_departments", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "departments"));
+  activeSnapshotUnsubscribes.push(unsubDepts);
+
+  const unsubTechs = onSnapshot(collection(db, "technicians"), (snapshot) => {
+    const list: Technician[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as Technician));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_technicians", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "technicians"));
+  activeSnapshotUnsubscribes.push(unsubTechs);
+
+  const unsubChatMsgs = onSnapshot(collection(db, "chatMessages"), (snapshot) => {
+    const list: ChatMessage[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as ChatMessage));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_chat_messages", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "chatMessages"));
+  activeSnapshotUnsubscribes.push(unsubChatMsgs);
+
+  const unsubChatRooms = onSnapshot(collection(db, "chatRooms"), (snapshot) => {
+    const list: ChatRoom[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as ChatRoom));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_chat_rooms", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "chatRooms"));
+  activeSnapshotUnsubscribes.push(unsubChatRooms);
+
+  const unsubEvents = onSnapshot(collection(db, "calendarEvents"), (snapshot) => {
+    const list: CalendarEvent[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as CalendarEvent));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "calendarEvents"));
+  activeSnapshotUnsubscribes.push(unsubEvents);
+
+  const unsubTasks = onSnapshot(collection(db, "tasks"), (snapshot) => {
+    const list: Task[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as Task));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_tasks", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "tasks"));
+  activeSnapshotUnsubscribes.push(unsubTasks);
+
+  const unsubDocs = onSnapshot(collection(db, "documents"), (snapshot) => {
+    const list: MunicipalDocument[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as MunicipalDocument));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_documents", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "documents"));
+  activeSnapshotUnsubscribes.push(unsubDocs);
+
+  const unsubForms = onSnapshot(collection(db, "digitalForms"), (snapshot) => {
+    const list: DigitalForm[] = [];
+    snapshot.forEach(doc => list.push(doc.data() as DigitalForm));
+    if (list.length > 0) {
+      localStorage.setItem("thulamela_crm_digital_forms", JSON.stringify(list));
+      triggerDbUpdateEvent();
+    }
+  }, (error) => handleFirestoreError(error, OperationType.LIST, "digitalForms"));
+  activeSnapshotUnsubscribes.push(unsubForms);
 }
 
 // Low-level Getters & Setters
@@ -551,6 +641,7 @@ export function getUsers(): User[] {
 
 export function saveUsers(users: User[]) {
   localStorage.setItem("thulamela_crm_users", JSON.stringify(users));
+  triggerDbUpdateEvent();
   // Sync to Firestore in background
   if (isFirebaseEnabled && db) {
     users.forEach(async (u) => {
@@ -569,6 +660,7 @@ export function getWards(): Ward[] {
 
 export function saveWards(wards: Ward[]) {
   localStorage.setItem("thulamela_crm_wards", JSON.stringify(wards));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     wards.forEach(async (w) => {
       try {
@@ -590,6 +682,7 @@ export function getTechnicians(): Technician[] {
 
 export function saveTechnicians(technicians: Technician[]) {
   localStorage.setItem("thulamela_crm_technicians", JSON.stringify(technicians));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     technicians.forEach(async (t) => {
       try {
@@ -607,6 +700,7 @@ export function getComplaints(): Complaint[] {
 
 export function saveComplaints(complaints: Complaint[]) {
   localStorage.setItem("thulamela_crm_complaints", JSON.stringify(complaints));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     complaints.forEach(async (c) => {
       try {
@@ -624,6 +718,7 @@ export function getNotifications(): Notification[] {
 
 export function saveNotifications(notifications: Notification[]) {
   localStorage.setItem("thulamela_crm_notifications", JSON.stringify(notifications));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     notifications.forEach(async (n) => {
       try {
@@ -641,6 +736,7 @@ export function getAnnouncements(): Announcement[] {
 
 export function saveAnnouncements(announcements: Announcement[]) {
   localStorage.setItem("thulamela_crm_announcements", JSON.stringify(announcements));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     announcements.forEach(async (a) => {
       try {
@@ -660,6 +756,7 @@ export function getAuditLogs(): AuditLog[] {
 
 export function saveAuditLogs(logs: AuditLog[]) {
   localStorage.setItem("thulamela_crm_audit_logs", JSON.stringify(logs));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     const unsyncedLogs = logs.filter(l => !syncedAuditLogIds.has(l.id));
     unsyncedLogs.forEach(async (l) => {
@@ -759,6 +856,7 @@ export function getChatRooms(): ChatRoom[] {
 
 export function saveChatRooms(rooms: ChatRoom[]) {
   localStorage.setItem("thulamela_crm_chat_rooms", JSON.stringify(rooms));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     rooms.forEach(async (r) => {
       try {
@@ -777,6 +875,7 @@ export function getChatMessages(): ChatMessage[] {
 
 export function saveChatMessages(messages: ChatMessage[]) {
   localStorage.setItem("thulamela_crm_chat_messages", JSON.stringify(messages));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     messages.forEach(async (m) => {
       try {
@@ -795,6 +894,7 @@ export function getCalendarEvents(): CalendarEvent[] {
 
 export function saveCalendarEvents(events: CalendarEvent[]) {
   localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(events));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     events.forEach(async (e) => {
       try {
@@ -813,6 +913,7 @@ export function getTasks(): Task[] {
 
 export function saveTasks(tasks: Task[]) {
   localStorage.setItem("thulamela_crm_tasks", JSON.stringify(tasks));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     tasks.forEach(async (t) => {
       try {
@@ -831,6 +932,7 @@ export function getDocuments(): MunicipalDocument[] {
 
 export function saveDocuments(documents: MunicipalDocument[]) {
   localStorage.setItem("thulamela_crm_documents", JSON.stringify(documents));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     documents.forEach(async (d) => {
       try {
@@ -843,13 +945,13 @@ export function saveDocuments(documents: MunicipalDocument[]) {
 }
 
 // Get and save Digital Forms
-// Get and save Digital Forms
 export function getDigitalForms(): DigitalForm[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_digital_forms") || "[]");
 }
 
 export function saveDigitalForms(forms: DigitalForm[]) {
   localStorage.setItem("thulamela_crm_digital_forms", JSON.stringify(forms));
+  triggerDbUpdateEvent();
   if (isFirebaseEnabled && db) {
     forms.forEach(async (f) => {
       try {
@@ -865,14 +967,96 @@ export function getServiceNotices(): ServiceNotice[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_service_notices") || "[]");
 }
 
-export function saveServiceNotices(notices: ServiceNotice[]) {
-  localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(notices));
+export function normalizeServiceNotice(notice: ServiceNotice): ServiceNotice {
+  const validCategories = ['Water', 'Electricity', 'Roads', 'Sewer', 'Waste', 'StreetLights', 'StormWater', 'Parks', 'Housing', 'General'];
+  const validStatuses = ['Operational', 'Maintenance', 'Emergency', 'Scheduled', 'In Progress', 'Delayed', 'Completed'];
+  const validPriorities = ['Low', 'Medium', 'High', 'Critical'];
+
+  const category = validCategories.includes(notice.category) ? notice.category : 'General';
+  const status = validStatuses.includes(notice.status) ? notice.status : 'In Progress';
+  const priority = validPriorities.includes(notice.priority) ? notice.priority : 'Medium';
+
+  return {
+    id: notice.id,
+    title: notice.title || "Municipal Service Notice",
+    category,
+    status,
+    cause: notice.cause || "Routine Maintenance",
+    description: notice.description || "Routine maintenance or service update.",
+    dateReported: notice.dateReported || new Date().toISOString(),
+    priority,
+    department: notice.department || "Technical Services",
+    departmentManager: notice.departmentManager || "Municipal Response Desk",
+    emergencyNumber: notice.emergencyNumber || "015 962 7500",
+    email: notice.email || "customercare@thulamela.gov.za",
+    officeHours: notice.officeHours || "07:30 - 16:30 (Mon-Fri)",
+    referenceNumber: notice.referenceNumber || `NOT-${Date.now().toString().slice(-6)}`,
+    progress: typeof notice.progress === "number" ? notice.progress : 25,
+    timeline: Array.isArray(notice.timeline) ? notice.timeline : [
+      { time: new Date().toISOString().replace("T", " ").slice(0, 16), description: "Service notice published." }
+    ],
+    affectedWards: Array.isArray(notice.affectedWards) ? notice.affectedWards : [1],
+    affectedArea: notice.affectedArea || "Thulamela Local Municipality",
+    streetLocation: notice.streetLocation || "",
+    estimatedCompletion: notice.estimatedCompletion || "",
+    assignedTechnician: notice.assignedTechnician || "",
+    householdsAffected: typeof notice.householdsAffected === "number" ? notice.householdsAffected : 0,
+    photos: Array.isArray(notice.photos) ? notice.photos : [],
+    videos: Array.isArray(notice.videos) ? notice.videos : [],
+    gpsCoordinates: notice.gpsCoordinates || "",
+  };
+}
+
+export async function saveSingleServiceNotice(notice: ServiceNotice): Promise<void> {
+  const normalized = normalizeServiceNotice(notice);
+  const current = getServiceNotices();
+  const idx = current.findIndex(n => n.id === normalized.id);
+  let updated: ServiceNotice[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = normalized;
+  } else {
+    updated = [normalized, ...current];
+  }
+  localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+
   if (isFirebaseEnabled && db) {
-    notices.forEach(async (n) => {
+    try {
+      await setDoc(doc(db, "serviceNotices", normalized.id), normalized);
+    } catch (err: any) {
+      console.error("Firestore error saving serviceNotice:", err);
+      handleFirestoreError(err, OperationType.WRITE, `serviceNotices/${normalized.id}`);
+    }
+  }
+}
+
+export async function deleteServiceNotice(id: string): Promise<void> {
+  const current = getServiceNotices();
+  const filtered = current.filter(n => n.id !== id);
+  localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
+
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "serviceNotices", id));
+    } catch (err: any) {
+      console.error("Firestore error deleting serviceNotice:", err);
+      handleFirestoreError(err, OperationType.DELETE, `serviceNotices/${id}`);
+    }
+  }
+}
+
+export function saveServiceNotices(notices: ServiceNotice[]) {
+  const normalizedNotices = notices.map(n => normalizeServiceNotice(n));
+  localStorage.setItem("thulamela_crm_service_notices", JSON.stringify(normalizedNotices));
+  triggerDbUpdateEvent();
+  if (isFirebaseEnabled && db) {
+    normalizedNotices.forEach(async (n) => {
       try {
         await setDoc(doc(db, "serviceNotices", n.id), n);
       } catch (err) {
-        console.warn("Firestore sync serviceNotices skipped/failed (expected if unauthorized or offline):", err);
+        console.warn("Firestore sync serviceNotices skipped/failed:", err);
       }
     });
   }

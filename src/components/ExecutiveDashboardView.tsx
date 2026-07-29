@@ -71,8 +71,27 @@ export default function ExecutiveDashboardView({ currentUser, onAddToast }: Exec
   // Resolution Rate SLA %
   const resolutionRate = totalCases > 0 ? Math.round((resolvedCases / totalCases) * 100) : 100;
 
-  // Average Turn-Around-Time (Simulated)
-  const averageSlaDays = 2.4; 
+  // Average Turn-Around-Time (Real calculation for Resolved / Closed complaints)
+  const resolvedComplaintsList = complaints.filter(
+    c => c.status === "Resolved" || c.status === "Closed"
+  );
+  let averageSlaDays: number | null = null;
+  if (resolvedComplaintsList.length > 0) {
+    let totalDays = 0;
+    let validCount = 0;
+    resolvedComplaintsList.forEach(c => {
+      const created = new Date(c.dateCreated).getTime();
+      const updated = new Date(c.dateUpdated).getTime();
+      if (!isNaN(created) && !isNaN(updated)) {
+        const diffMs = Math.max(0, updated - created);
+        totalDays += diffMs / (1000 * 60 * 60 * 24);
+        validCount++;
+      }
+    });
+    if (validCount > 0) {
+      averageSlaDays = Math.round((totalDays / validCount) * 10) / 10;
+    }
+  }
 
   // Star Ratings CSAT average
   const ratedCases = complaints.filter(c => c.rating && c.rating > 0);
@@ -80,16 +99,28 @@ export default function ExecutiveDashboardView({ currentUser, onAddToast }: Exec
     ? (ratedCases.reduce((acc, curr) => acc + (curr.rating || 0), 0) / ratedCases.length).toFixed(1)
     : "4.5"; // Default high South African municipal target
 
-  // RECHARTS DATA 1: Lodged vs Resolved trend (Monthly representation)
-  const monthlyData = [
-    { name: "Jan", Lodged: 45, Resolved: 35 },
-    { name: "Feb", Lodged: 60, Resolved: 52 },
-    { name: "Mar", Lodged: 80, Resolved: 72 },
-    { name: "Apr", Lodged: 55, Resolved: 48 },
-    { name: "May", Lodged: 90, Resolved: 81 },
-    { name: "Jun", Lodged: 120, Resolved: 105 },
-    { name: "Jul", Lodged: totalCases, Resolved: resolvedCases }
-  ];
+  // RECHARTS DATA 1: Lodged vs Resolved trend (Last 7 months calculation)
+  const now = new Date();
+  const monthlyData = Array.from({ length: 7 }, (_, i) => {
+    const monthDate = new Date(now.getFullYear(), now.getMonth() - (6 - i), 1);
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const name = monthDate.toLocaleString("en-US", { month: "short" });
+
+    const monthComplaints = complaints.filter(c => {
+      const cDate = new Date(c.dateCreated);
+      return !isNaN(cDate.getTime()) && cDate.getFullYear() === year && cDate.getMonth() === month;
+    });
+
+    const lodged = monthComplaints.length;
+    const resolved = monthComplaints.filter(c => c.status === "Resolved" || c.status === "Closed").length;
+
+    return {
+      name,
+      Lodged: lodged,
+      Resolved: resolved
+    };
+  });
 
   // RECHARTS DATA 2: Department Distribution
   const departmentBreakdown = departments.map(d => {
@@ -148,7 +179,9 @@ export default function ExecutiveDashboardView({ currentUser, onAddToast }: Exec
             <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">Avg Turnaround Time</span>
             <Timer size={16} className="text-gov-green" />
           </div>
-          <span className="text-3xl font-black font-mono text-slate-900 block">{averageSlaDays} Days</span>
+          <span className="text-3xl font-black font-mono text-slate-900 block">
+            {averageSlaDays !== null ? `${averageSlaDays} Days` : "No data yet"}
+          </span>
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">SLA Target: 3.0 Days</span>
         </div>
 

@@ -1,15 +1,34 @@
 import React, { useRef } from 'react';
 import { X, Upload, File, Play } from 'lucide-react';
 
+const DEFAULT_ALLOWED_TYPES = [
+  'image/jpeg', 
+  'image/png', 
+  'image/webp', 
+  'application/pdf', 
+  'video/mp4', 
+  'video/quicktime', 
+  'video/x-msvideo', 
+  'video/webm'
+];
+
 interface FileUploaderProps {
   files: File[];
   setFiles: (files: File[]) => void;
   maxFiles?: number;
   maxSizeBytes?: number;
+  allowedTypes?: string[];
   onAddToast?: (title: string, message: string, type?: "success" | "info" | "warning" | "error") => void;
 }
 
-export default function FileUploader({ files, setFiles, maxFiles = 10, maxSizeBytes = 100 * 1024 * 1024, onAddToast }: FileUploaderProps) {
+export default function FileUploader({ 
+  files, 
+  setFiles, 
+  maxFiles = 10, 
+  maxSizeBytes = 100 * 1024 * 1024, 
+  allowedTypes = DEFAULT_ALLOWED_TYPES,
+  onAddToast 
+}: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -18,13 +37,13 @@ export default function FileUploader({ files, setFiles, maxFiles = 10, maxSizeBy
       const validFiles: File[] = [];
 
       newFiles.forEach(file => {
-        const isTypeValid = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'].includes(file.type);
+        const isTypeValid = allowedTypes.includes(file.type);
         const isSizeValid = file.size <= maxSizeBytes;
 
         if (!isSizeValid) {
-          onAddToast?.("File Upload Error", "Max file size 5MB", "error");
+          onAddToast?.("File Upload Error", `Max file size ${Math.round(maxSizeBytes / (1024 * 1024))}MB`, "error");
         } else if (!isTypeValid) {
-          onAddToast?.("File Upload Error", "Please upload JPEG or PNG", "error");
+          onAddToast?.("File Upload Error", "Invalid file type uploaded", "error");
         } else {
           validFiles.push(file);
         }
@@ -46,8 +65,8 @@ export default function FileUploader({ files, setFiles, maxFiles = 10, maxSizeBy
       >
         <Upload className="mx-auto text-slate-400 mb-2" size={24} />
         <p className="text-xs text-slate-600 font-bold">Click to upload or drag files here</p>
-        <p className="text-[10px] text-slate-400 mt-1">JPG, PNG, WEBP, PDF, MP4, MOV, AVI, WEBM (Max {maxSizeBytes / (1024 * 1024)}MB per file)</p>
-        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden text-base" multiple accept="image/*,.pdf,video/*" />
+        <p className="text-[10px] text-slate-400 mt-1">Supported formats (Max {Math.round(maxSizeBytes / (1024 * 1024))}MB per file)</p>
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden text-base" multiple accept={allowedTypes.join(',')} />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {files.map((file, index) => (

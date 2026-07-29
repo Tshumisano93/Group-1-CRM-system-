@@ -152,9 +152,7 @@ export default function CouncillorDashboard({
     };
     window.addEventListener("thulamela_db_update", handleDbUpdate);
 
-    const timer = setInterval(loadCrmData, 4000);
     return () => {
-      clearInterval(timer);
       window.removeEventListener("thulamela_db_update", handleDbUpdate);
     };
   }, [currentUser]);
@@ -1341,21 +1339,7 @@ export default function CouncillorDashboard({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                   <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="font-bold text-slate-700 block">GPS Coordinates</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // Simulate GPS ping
-                          setGpsCoordinates(`-22.95567, 30.48112`);
-                          onAddToast("GPS Signal Calibrated", "Satellite telemetry obtained: -22.95567, 30.48112", "info");
-                        }}
-                        className="text-gov-blue hover:underline text-[10px] font-bold uppercase tracking-wider flex items-center space-x-0.5"
-                      >
-                        <MapPin size={10} className="animate-bounce" />
-                        <span>Simulate Auto-Locate</span>
-                      </button>
-                    </div>
+                    <label className="font-bold text-slate-700 block">GPS Coordinates</label>
                     <input
                       type="text"
                       placeholder="-22.95567, 30.48112"

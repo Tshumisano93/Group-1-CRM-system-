@@ -134,7 +134,7 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
     setSelectedDocId(null);
   };
 
-  // Simulate secure download with audit trail
+  // Secure download with audit trail
   const handleSecureDownload = (doc: MunicipalDocument) => {
     onAddToast("Secure Download Triggered", `Downloading: ${doc.title}. An audit log entry has been registered for compliance reporting.`, "success");
     
@@ -145,6 +145,17 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
       "Download Document",
       `Downloaded document '${doc.title}' (version v${doc.version})`
     );
+
+    if (doc.fileUrl) {
+      const link = document.createElement("a");
+      link.href = doc.fileUrl;
+      link.download = doc.title || "document";
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Update/Upload a new version

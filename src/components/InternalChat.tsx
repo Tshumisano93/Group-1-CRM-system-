@@ -154,14 +154,12 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
 
   useEffect(() => {
     loadChatData();
-    const interval = setInterval(loadChatData, 5000);
     
     // Listen for external DB updates
     const handleDbUpdate = () => loadChatData();
     window.addEventListener("thulamela_db_update", handleDbUpdate);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener("thulamela_db_update", handleDbUpdate);
     };
   }, []);

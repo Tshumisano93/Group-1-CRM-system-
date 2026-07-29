@@ -33,8 +33,15 @@ service cloud.firestore {
       return existsUser() && ('role' in getUserData()) ? getUserData().role : '';
     }
 
+    function isBootstrapAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'admin@thulamela.gov.za' ||
+        request.auth.token.email == 'ndoutshumi@gmail.com'
+      );
+    }
+
     function isAdmin() {
-      return isSignedIn() && (getUserRole() == 'super_admin' || getUserRole() == 'municipal_admin');
+      return isSignedIn() && (getUserRole() == 'super_admin' || getUserRole() == 'municipal_admin' || isBootstrapAdmin());
     }
 
     function isCouncillor() {
@@ -159,13 +166,13 @@ service cloud.firestore {
       return data.id is string && data.id.size() <= 128
           && data.title is string && data.title.size() <= 200
           && data.category is string && (data.category in ['Water', 'Electricity', 'Roads', 'Sewer', 'Waste', 'StreetLights', 'StormWater', 'Parks', 'Housing', 'General'])
-          && data.status is string && (data.status == 'Operational' || data.status == 'Maintenance' || data.status == 'Emergency' || data.status == 'Scheduled')
+          && data.status is string && (data.status in ['Operational', 'Maintenance', 'Emergency', 'Scheduled', 'In Progress', 'Delayed', 'Completed'])
           && data.description is string && data.description.size() <= 2000
           && data.dateReported is string
-          && data.priority is string && (data.priority == 'Low' || data.priority == 'Medium' || data.priority == 'High')
+          && data.priority is string && (data.priority in ['Low', 'Medium', 'High', 'Critical'])
           && data.department is string && data.department.size() <= 128
           && data.departmentManager is string && data.departmentManager.size() <= 128
-          && data.emergencyNumber is string && data.emergencyNumber.size() <= 20
+          && data.emergencyNumber is string && data.emergencyNumber.size() <= 64
           && data.email is string && data.email.size() <= 128
           && data.officeHours is string && data.officeHours.size() <= 128
           && data.referenceNumber is string && data.referenceNumber.size() <= 128
@@ -176,7 +183,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
 
-      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && isAdmin();
+      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() || (request.auth.uid == userId && isBootstrapAdmin())
+      );
 
       allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
         isAdmin() ||
@@ -185,7 +194,8 @@ service cloud.firestore {
           incoming().role == existing().role &&
           incoming().status == existing().status &&
           incoming().diff(existing()).affectedKeys().hasOnly(['profilePicture', 'physicalAddress', 'phone', 'email'])
-        )
+        ) ||
+        (request.auth.uid == userId && isBootstrapAdmin())
       );
 
       allow delete: if isAdmin();
@@ -213,7 +223,7 @@ service cloud.firestore {
     }
 
     match /complaints/{complaintId} {
-      allow get: if (isSignedIn() && (!isTechnician() || resource.data.departmentId == getUserData().departmentId)) || true;
+      allow get: if (isSignedIn() && (!isTechnician() || resource.data.departmentId == getUserData().departmentId)) || resource.data.reporterId == 'PUBLIC';
       allow list: if isSignedIn() && (!isTechnician() || resource.data.departmentId == getUserData().departmentId);
       allow create: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming());
       allow create: if isValidId(complaintId) && isValidPublicComplaint(incoming());
@@ -358,7 +368,7 @@ service cloud.firestore {
 
     match /serviceNotices/{noticeId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() && isValidId(noticeId) && isValidServiceNotice(incoming());
     }
   }
 }

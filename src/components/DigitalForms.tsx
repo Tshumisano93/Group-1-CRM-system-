@@ -61,15 +61,29 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
     return () => window.removeEventListener("thulamela_db_update", loadForms);
   }, []);
 
-  // Trigger simulated GPS Capture
+  // Trigger GPS Capture via Geolocation API
   const handleCaptureGps = () => {
+    if (!navigator.geolocation) {
+      onAddToast("GPS Error", "Unable to access location. Please enable location permissions or enter coordinates manually.", "error");
+      return;
+    }
+
     setIsLocating(true);
-    setTimeout(() => {
-      const mockGps = `-22.${Math.floor(Math.random() * 9000) + 1000}, 30.${Math.floor(Math.random() * 9000) + 1000}`;
-      setCapturedGps(mockGps);
-      setIsLocating(false);
-      onAddToast("GPS coordinates Captured", `Simulated latitude and longitude recorded successfully: ${mockGps}`, "success");
-    }, 1500);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude.toFixed(5);
+        const lng = position.coords.longitude.toFixed(5);
+        const gpsString = `${lat}, ${lng}`;
+        setCapturedGps(gpsString);
+        setIsLocating(false);
+        onAddToast("GPS coordinates Captured", `Latitude and longitude recorded successfully: ${gpsString}`, "success");
+      },
+      (error) => {
+        setIsLocating(false);
+        onAddToast("GPS Error", "Unable to access location. Please enable location permissions or enter coordinates manually.", "error");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   };
 
   // Submit dynamic form

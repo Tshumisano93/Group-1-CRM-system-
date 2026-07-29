@@ -149,9 +149,7 @@ export default function TechnicianDashboard({
     };
     window.addEventListener("thulamela_db_update", handleDbUpdate);
 
-    const interval = setInterval(loadTechData, 4000);
     return () => {
-      clearInterval(interval);
       window.removeEventListener("thulamela_db_update", handleDbUpdate);
     };
   }, [currentUser]);

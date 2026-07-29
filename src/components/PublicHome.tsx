@@ -15,6 +15,7 @@ import {
   PhoneCall, 
   MapPin, 
   CheckCircle, 
+  CheckCircle2, 
   Clock, 
   FileText, 
   Calendar, 
@@ -50,21 +51,21 @@ import { motion, AnimatePresence } from "motion/react";
 const isNoticeForService = (n: ServiceNotice, label: string): boolean => {
   const l = label.toLowerCase();
   if (l === "emergency") {
-    return n.priority === "Critical" || n.status === "Emergency";
+    return n.priority === "Critical" || n.priority === "High" || n.status === "Emergency" || n.category === "General";
   }
   
-  const cat = n.category.toLowerCase();
+  const cat = (n.category || "").toLowerCase();
   switch (l) {
     case "water":
-      return cat.includes("water") && !cat.includes("storm");
+      return cat.includes("water") || cat.includes("sewer") || cat.includes("storm") || cat.includes("sanitation");
     case "electricity":
-      return cat.includes("elect") || cat.includes("power") || cat.includes("energy");
+      return cat.includes("elect") || cat.includes("power") || cat.includes("energy") || cat.includes("street");
     case "roads":
-      return cat.includes("road") || cat.includes("pothole");
+      return cat.includes("road") || cat.includes("pothole") || cat.includes("traffic") || cat.includes("park");
     case "waste":
-      return cat.includes("waste") || cat.includes("trash") || cat.includes("refuse") || cat.includes("dump");
+      return cat.includes("waste") || cat.includes("trash") || cat.includes("refuse") || cat.includes("dump") || cat.includes("house");
     default:
-      return false;
+      return true;
   }
 };
 
@@ -326,24 +327,150 @@ export default function PublicHome({ onNavigate, onAddToast }: PublicHomeProps) 
                 })}
               </div>
 
-              <div id="emergency-banner" className="w-full">
-                <div className="bg-slate-900 text-white rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-6 border border-slate-800 shadow-sm">
-                  <div className="flex items-center space-x-3 flex-1 text-left">
-                    <span className="bg-red-600 text-[10px] font-black px-2.5 py-1 rounded uppercase animate-pulse shrink-0">Urgent Notice</span>
-                    <p className="text-xs font-medium text-slate-300 leading-relaxed italic">
-                      Water maintenance scheduled for Ward 12 and 15 on Wednesday from 08:00 - 17:00. High-usage restriction bylaws are in active enforcement.
+              {/* Emergency Banner dynamically powered by Firestore notices */}
+              {(() => {
+                const urgentNotice = notices.find(n => n.priority === "Critical" || n.priority === "High" || n.status === "Emergency") || notices[0];
+                return (
+                  <div id="emergency-banner" className="w-full">
+                    <div className="bg-slate-900 text-white rounded-2xl px-6 py-4 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0 md:space-x-6 border border-slate-800 shadow-sm">
+                      <div className="flex items-center space-x-3 flex-1 text-left">
+                        <span className="bg-red-600 text-[10px] font-black px-2.5 py-1 rounded uppercase animate-pulse shrink-0">
+                          {urgentNotice?.priority === "Critical" ? "Critical Alert" : "Urgent Notice"}
+                        </span>
+                        <p className="text-xs font-medium text-slate-300 leading-relaxed">
+                          <strong className="text-white mr-1.5">{urgentNotice ? urgentNotice.title : "Thulamela Customer Care Hotline Active"}</strong>
+                          <span className="text-slate-400">
+                            {urgentNotice ? `${urgentNotice.affectedArea || 'Thulamela Municipality'} - ${urgentNotice.description}` : "Contact 015 962 4140 for 24/7 emergency municipal service reporting."}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-3 shrink-0">
+                        {urgentNotice && (
+                          <button
+                            onClick={() => setSelectedNotice(urgentNotice)}
+                            className="bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border border-slate-700"
+                          >
+                            View Notice
+                          </button>
+                        )}
+                        <button
+                          id="emergency-banner-call"
+                          onClick={() => window.open("tel:0159624140")}
+                          className="bg-gov-yellow hover:bg-gov-yellow-hover text-slate-950 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
+                        >
+                          24/7 Hotline: 015 962 4140
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Live Service Notices & Disruptions Feed */}
+              <div id="live-service-notices-section" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 pb-4 mb-6 gap-3">
+                  <div>
+                    <h2 className="text-lg font-black uppercase tracking-tight text-slate-900 flex items-center">
+                      <AlertTriangle className="mr-2 text-amber-500" size={20} />
+                      <span>Live Municipal Service Notices & Disruptions</span>
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Real-time updates directly from Thulamela Technical Services Department
                     </p>
                   </div>
-                  <div className="flex items-center space-x-4 shrink-0">
-                    <button
-                      id="emergency-banner-call"
-                      onClick={() => window.open("tel:0159624140")}
-                      className="bg-gov-yellow hover:bg-gov-yellow-hover text-slate-950 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
-                    >
-                      24/7 Hotline: 015 962 4140
-                    </button>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping mr-1.5"></span>
+                      Database Live ({notices.length})
+                    </span>
+                    {selectedCategory && (
+                      <button
+                        onClick={() => setSelectedCategory(null)}
+                        className="text-xs text-slate-500 hover:text-slate-800 font-bold underline"
+                      >
+                        Show All
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {(() => {
+                  const filtered = selectedCategory 
+                    ? notices.filter(n => isNoticeForService(n, selectedCategory))
+                    : notices;
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <CheckCircle2 className="mx-auto text-emerald-500 mb-2" size={32} />
+                        <h4 className="text-sm font-bold text-slate-800">No active disruptions reported</h4>
+                        <p className="text-xs text-slate-500 mt-1">All municipal services in this category are operating normally.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filtered.map(notice => {
+                        const isCritical = notice.priority === "Critical" || notice.priority === "High";
+                        return (
+                          <div
+                            key={notice.id}
+                            onClick={() => setSelectedNotice(notice)}
+                            className="group border border-slate-200 hover:border-gov-green/50 bg-slate-50/50 hover:bg-white p-4 rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer flex flex-col justify-between"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                  isCritical 
+                                    ? "bg-red-100 text-red-800 border border-red-200" 
+                                    : "bg-blue-100 text-blue-800 border border-blue-200"
+                                }`}>
+                                  {notice.category}
+                                </span>
+                                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded ${
+                                  notice.priority === "Critical" ? "bg-red-600 text-white" :
+                                  notice.priority === "High" ? "bg-amber-500 text-white" :
+                                  "bg-slate-200 text-slate-700"
+                                }`}>
+                                  {notice.priority}
+                                </span>
+                              </div>
+
+                              <h3 className="text-sm font-black text-slate-900 group-hover:text-gov-green transition-colors line-clamp-2">
+                                {notice.title}
+                              </h3>
+
+                              <p className="text-xs text-slate-600 mt-1.5 line-clamp-2 leading-relaxed">
+                                {notice.description}
+                              </p>
+
+                              <div className="mt-3 space-y-1 text-[11px] text-slate-500">
+                                <div className="flex justify-between">
+                                  <span className="font-medium">Area:</span>
+                                  <span className="font-bold text-slate-700 truncate max-w-[150px]">{notice.affectedArea || "All Wards"}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="font-medium">Ref #:</span>
+                                  <span className="font-mono text-slate-600">{notice.referenceNumber || notice.id}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between">
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {notice.dateReported ? new Date(notice.dateReported).toLocaleDateString("en-ZA") : "Recent"}
+                              </span>
+                              <span className="text-xs font-black text-gov-green flex items-center group-hover:translate-x-0.5 transition-transform">
+                                Details &rarr;
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 3. News, Announcements & Community Board */}

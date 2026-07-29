@@ -63,24 +63,6 @@ export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicCo
   const [loading, setLoading] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
 
-  // Filter image uploads strictly to JPEG and PNG
-  const handleFilesChange = (newFiles: File[]) => {
-    const validFiles: File[] = [];
-    newFiles.forEach((file) => {
-      const isTypeValid = file.type === "image/jpeg" || file.type === "image/png";
-      if (!isTypeValid) {
-        onAddToast(
-          "File Upload Error",
-          `"${file.name}" was skipped. Please upload JPEG or PNG images only.`,
-          "error"
-        );
-      } else {
-        validFiles.push(file);
-      }
-    });
-    setFiles(validFiles);
-  };
-
   const convertFilesToBase64 = (filesToConvert: File[]): Promise<string[]> => {
     return Promise.all(
       filesToConvert.map(
@@ -487,9 +469,10 @@ export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicCo
 
               <FileUploader
                 files={files}
-                setFiles={handleFilesChange}
+                setFiles={setFiles}
                 maxFiles={5}
                 maxSizeBytes={5 * 1024 * 1024}
+                allowedTypes={['image/jpeg', 'image/png']}
                 onAddToast={onAddToast}
               />
             </div>

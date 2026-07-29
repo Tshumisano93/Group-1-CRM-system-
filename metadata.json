@@ -1,7 +1,9 @@
 {
   "name": "Thulamela Municipality CRM",
   "description": "Complaint Relationship Management (CRM) system for Thulamela Municipality, Limpopo, South Africa, empowering Ward Councillors to report, monitor, and manage service delivery complaints across all 41 wards.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "geolocation"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

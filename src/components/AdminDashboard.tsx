@@ -145,9 +145,7 @@ export default function AdminDashboard({
     };
     window.addEventListener("thulamela_db_update", handleDbUpdate);
 
-    const interval = setInterval(loadDashboardData, 4000);
     return () => {
-      clearInterval(interval);
       window.removeEventListener("thulamela_db_update", handleDbUpdate);
     };
   }, []);
