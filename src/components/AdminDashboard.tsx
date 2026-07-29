@@ -12,9 +12,13 @@ import {
   addAuditLog, 
   getDepartments,
   addNotification,
-  getSyncStatus
+  getNotifications,
+  saveNotifications,
+  deleteNotification,
+  getSyncStatus,
+  deleteComplaint
 } from "../db";
-import { User, Complaint, Ward, Department, Technician, AuditLog, ComplaintStatus, ComplaintPriority, AccountRequest } from "../types";
+import { User, Complaint, Ward, Department, Technician, AuditLog, ComplaintStatus, ComplaintPriority, AccountRequest, Notification } from "../types";
 import { collection, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
 import { db, auth, isFirebaseEnabled } from "../firebase";
 import { 
@@ -49,7 +53,8 @@ import {
   Folder,
   Clipboard,
   CheckSquare,
-  Download
+  Download,
+  Bell
 } from "lucide-react";
 
 import InternalChat from "./InternalChat";
@@ -69,7 +74,7 @@ interface AdminDashboardProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
-type AdminTab = "dashboard" | "councillors" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices";
+type AdminTab = "dashboard" | "councillors" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices" | "notifications";
 
 export default function AdminDashboard({
   currentUser,
@@ -84,6 +89,7 @@ export default function AdminDashboard({
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [accountRequests, setAccountRequests] = useState<AccountRequest[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [editingWard, setEditingWard] = useState<Ward | null>(null);
 
@@ -133,6 +139,29 @@ export default function AdminDashboard({
     setUsers(getUsers());
     setTechnicians(getTechnicians());
     setAuditLogs(getAuditLogs());
+
+    const allNotifs = getNotifications();
+    const adminNotifs = allNotifs.filter(n => {
+      if (n.userId === currentUser.id || n.userId === "all") return true;
+      if (n.role === currentUser.role) return true;
+      if ((currentUser.role === "super_admin" || currentUser.role === "municipal_admin") && (n.role === "super_admin" || n.role === "municipal_admin" || n.role === "all")) return true;
+      return false;
+    });
+    setNotifications(adminNotifs);
+  };
+
+  const handleClearAllNotifications = async () => {
+    const toDelete = [...notifications];
+    for (const n of toDelete) {
+      await deleteNotification(n.id);
+    }
+    setNotifications([]);
+    onAddToast("Notifications Cleared", "All visible notifications have been removed.", "info");
+  };
+
+  const handleDismissNotification = async (id: string) => {
+    await deleteNotification(id);
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   useEffect(() => {
@@ -958,6 +987,22 @@ export default function AdminDashboard({
               <AlertTriangle size={16} />
               <span>Service Notices</span>
             </button>
+
+            <button
+              id="admin-tab-notifications"
+              onClick={() => setActiveTab("notifications")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+                activeTab === "notifications" ? "bg-gov-blue text-white shadow-md shadow-gov-blue/20" : "hover:bg-slate-800 hover:text-white text-slate-400"
+              }`}
+            >
+              <Bell size={16} />
+              <span>Notifications</span>
+              {notifications.filter(n => !n.isRead).length > 0 && (
+                <span className="ml-auto bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                  {notifications.filter(n => !n.isRead).length}
+                </span>
+              )}
+            </button>
           </nav>
         </div>
 
@@ -1776,6 +1821,81 @@ export default function AdminDashboard({
           </div>
         )}
 
+        {activeTab === "notifications" && (
+          <div id="tab-pane-notifications" className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 space-y-6">
+            <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center">
+                  <Bell className="mr-2 text-gov-yellow" size={22} />
+                  <span>Notification Center</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Receive immediate automated alerts regarding complaint assignments, updates, and municipal notices.</p>
+              </div>
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAllNotifications}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg uppercase tracking-wider"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {notifications.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 font-bold">
+                  Your notification archive is completely empty.
+                </div>
+              ) : (
+                notifications.map((n) => (
+                  <div 
+                    key={n.id}
+                    className={`p-4 rounded-xl border text-xs flex justify-between items-start leading-relaxed transition-all ${
+                      !n.isRead ? "bg-amber-50/40 border-l-4 border-l-gov-yellow border-slate-200" : "bg-slate-50/40 border-slate-100"
+                    }`}
+                  >
+                    <div className="space-y-1 flex-1 pr-4">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-mono uppercase tracking-wider ${
+                        n.type === "success" ? "bg-emerald-100 text-emerald-800"
+                          : n.type === "alert" ? "bg-red-100 text-red-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}>
+                        {n.type}
+                      </span>
+                      <h4 className="font-bold text-slate-950 text-sm mt-1">{n.title}</h4>
+                      <p className="text-slate-600 mt-0.5">{n.message}</p>
+                      {n.complaintId && (
+                        <button
+                          onClick={() => {
+                            const comps = getComplaints();
+                            const matched = comps.find(c => c.id === n.complaintId);
+                            if (matched) setSelectedComplaint(matched);
+                          }}
+                          className="text-gov-blue hover:underline font-bold font-mono text-[10px] mt-1.5 block"
+                        >
+                          View Related Ticket {n.complaintId} →
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0 mt-1">
+                      <button
+                        onClick={() => handleDismissNotification(n.id)}
+                        className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors"
+                        title="Dismiss notification"
+                      >
+                        <X size={14} />
+                      </button>
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        {new Date(n.timestamp).toLocaleDateString("en-ZA")} {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === "digital_forms" && (
           <DigitalForms currentUser={currentUser} onAddToast={onAddToast} />
         )}
@@ -1911,21 +2031,45 @@ export default function AdminDashboard({
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end space-x-2">
-              <button
-                id="close-dispatch-btn"
-                onClick={() => setSelectedComplaint(null)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold uppercase rounded-lg"
-              >
-                Close
-              </button>
-              <button
-                id="save-dispatch-btn"
-                onClick={() => handleDispatchComplaint(selectedComplaint.id)}
-                className="px-5 py-2 bg-gov-blue hover:bg-gov-blue-hover text-white font-bold uppercase rounded-lg"
-              >
-                Save Dispatch Action
-              </button>
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center">
+              <div>
+                {(currentUser.role === "super_admin" || currentUser.role === "municipal_admin") && (
+                  <button
+                    onClick={async () => {
+                      if (window.confirm(`Are you sure you want to delete complaint ${selectedComplaint.id} and its associated storage files?`)) {
+                        try {
+                          await deleteComplaint(selectedComplaint);
+                          setComplaints(prev => prev.filter(c => c.id !== selectedComplaint.id));
+                          onAddToast("Complaint Deleted", `Complaint ${selectedComplaint.id} and associated storage files were successfully deleted.`, "success");
+                          setSelectedComplaint(null);
+                        } catch (err: any) {
+                          onAddToast("Deletion Failed", err?.message || "Could not delete complaint", "error");
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold uppercase rounded-lg text-xs flex items-center space-x-1"
+                  >
+                    <Trash2 size={14} className="mr-1" />
+                    <span>Delete Complaint</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  id="close-dispatch-btn"
+                  onClick={() => setSelectedComplaint(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold uppercase rounded-lg text-xs"
+                >
+                  Close
+                </button>
+                <button
+                  id="save-dispatch-btn"
+                  onClick={() => handleDispatchComplaint(selectedComplaint.id)}
+                  className="px-5 py-2 bg-gov-blue hover:bg-gov-blue-hover text-white font-bold uppercase rounded-lg text-xs"
+                >
+                  Save Dispatch Action
+                </button>
+              </div>
             </div>
 
           </div>

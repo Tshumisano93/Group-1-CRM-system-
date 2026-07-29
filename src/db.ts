@@ -1,7 +1,8 @@
 import { User, Ward, Department, Technician, Complaint, Notification, Announcement, AuditLog, UserRole, ChatMessage, ChatRoom, CalendarEvent, Task, MunicipalDocument, DigitalForm, AccountRequest, ServiceNotice } from "./types";
 import { SEED_WARDS, DEPARTMENTS, SEED_TECHNICIANS, SEED_USERS, SEED_COMPLAINTS, ANNOUNCEMENTS, SEED_SERVICE_NOTICES } from "./data";
-import { isFirebaseEnabled, db, auth } from "./firebase";
+import { isFirebaseEnabled, db, auth, storage } from "./firebase";
 import { signInAnonymously } from "firebase/auth";
+import { deleteObject, ref } from "firebase/storage";
 import { 
   collection, 
   doc, 
@@ -712,6 +713,44 @@ export function saveComplaints(complaints: Complaint[]) {
   }
 }
 
+export async function deleteComplaint(complaint: Complaint): Promise<void> {
+  const complaints = getComplaints();
+  const filtered = complaints.filter(c => c.id !== complaint.id);
+  saveComplaints(filtered);
+
+  if (complaint.supportingImages && Array.isArray(complaint.supportingImages)) {
+    for (const url of complaint.supportingImages) {
+      if (typeof url === "string" && url.startsWith("https://firebasestorage")) {
+        try {
+          if (storage) {
+            await deleteObject(ref(storage, url));
+          }
+        } catch (err) {
+          console.warn("Failed to delete storage file for complaint image:", url, err);
+        }
+      }
+    }
+  }
+
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "complaints", complaint.id));
+    } catch (err: any) {
+      console.error("Firestore error deleting complaint:", err);
+      handleFirestoreError(err, OperationType.DELETE, `complaints/${complaint.id}`);
+    }
+  }
+
+  const currentUser = getCurrentUser();
+  addAuditLog(
+    currentUser?.id || "ADMIN-001",
+    currentUser?.name || "Administrator",
+    currentUser?.role || "super_admin",
+    "Delete Complaint",
+    `Deleted complaint #${complaint.id} - ${complaint.title}`
+  );
+}
+
 export function getNotifications(): Notification[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_notifications") || "[]");
 }
@@ -727,6 +766,21 @@ export function saveNotifications(notifications: Notification[]) {
         console.warn("Firestore sync notifications skipped/failed (expected if unauthorized or offline):", err);
       }
     });
+  }
+}
+
+export async function deleteNotification(notificationId: string): Promise<void> {
+  const notifications = getNotifications();
+  const filtered = notifications.filter(n => n.id !== notificationId);
+  saveNotifications(filtered);
+
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "notifications", notificationId));
+    } catch (err: any) {
+      console.error("Firestore error deleting notification:", err);
+      handleFirestoreError(err, OperationType.DELETE, `notifications/${notificationId}`);
+    }
   }
 }
 

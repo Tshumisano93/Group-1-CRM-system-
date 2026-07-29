@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getServiceNotices, saveSingleServiceNotice, deleteServiceNotice } from "../db";
+import { getServiceNotices, saveSingleServiceNotice, deleteServiceNotice, getDepartments, getWards } from "../db";
 import { ServiceNotice } from "../types";
 import { Plus, Trash2, Edit2, AlertTriangle, X, CheckCircle2, ShieldAlert, Loader2 } from "lucide-react";
 
@@ -16,13 +16,13 @@ export default function ServiceNoticeManagement() {
   const [category, setCategory] = useState<ServiceNotice["category"]>("Water");
   const [status, setStatus] = useState<ServiceNotice["status"]>("Operational");
   const [priority, setPriority] = useState<ServiceNotice["priority"]>("Medium");
-  const [department, setDepartment] = useState("Water and Sanitation");
+  const [department, setDepartment] = useState("");
   const [departmentManager, setDepartmentManager] = useState("T. Nekhavhambe");
   const [emergencyNumber, setEmergencyNumber] = useState("015 962 7500");
   const [email, setEmail] = useState("info@thulamela.gov.za");
   const [officeHours, setOfficeHours] = useState("08:00 - 16:30");
   const [affectedArea, setAffectedArea] = useState("All Wards");
-  const [affectedWards, setAffectedWards] = useState("1");
+  const [affectedWards, setAffectedWards] = useState<number[]>([]);
   const [cause, setCause] = useState("Scheduled Maintenance");
   const [description, setDescription] = useState("");
   const [progress, setProgress] = useState("0");
@@ -40,13 +40,13 @@ export default function ServiceNoticeManagement() {
     setCategory("Water");
     setStatus("Operational");
     setPriority("Medium");
-    setDepartment("Water and Sanitation");
+    setDepartment("");
     setDepartmentManager("T. Nekhavhambe");
     setEmergencyNumber("015 962 7500");
     setEmail("info@thulamela.gov.za");
     setOfficeHours("08:00 - 16:30");
     setAffectedArea("All Wards");
-    setAffectedWards("1");
+    setAffectedWards([]);
     setCause("Scheduled Maintenance");
     setDescription("");
     setProgress("0");
@@ -67,13 +67,13 @@ export default function ServiceNoticeManagement() {
     setCategory(notice.category);
     setStatus(notice.status);
     setPriority(notice.priority);
-    setDepartment(notice.department || "Technical Services");
+    setDepartment(notice.department || "");
     setDepartmentManager(notice.departmentManager || "N/A");
     setEmergencyNumber(notice.emergencyNumber || "015 962 7500");
     setEmail(notice.email || "info@thulamela.gov.za");
     setOfficeHours(notice.officeHours || "08:00 - 16:30");
     setAffectedArea(notice.affectedArea || "All Wards");
-    setAffectedWards(notice.affectedWards ? notice.affectedWards.join(", ") : "1");
+    setAffectedWards(notice.affectedWards || []);
     setCause(notice.cause || "Scheduled Maintenance");
     setDescription(notice.description || "");
     setProgress(String(notice.progress || 0));
@@ -97,11 +97,6 @@ export default function ServiceNoticeManagement() {
 
     setIsSubmitting(true);
 
-    const parsedWards = affectedWards
-      .split(",")
-      .map(w => parseInt(w.trim(), 10))
-      .filter(w => !isNaN(w) && w > 0);
-
     const newNotice: ServiceNotice = {
       id: editingNotice ? editingNotice.id : `notice-${Date.now()}`,
       title: title.trim(),
@@ -112,7 +107,7 @@ export default function ServiceNoticeManagement() {
       cause: cause.trim() || "Maintenance",
       dateReported: editingNotice ? editingNotice.dateReported : new Date().toISOString(),
       estimatedCompletion: new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0],
-      affectedWards: parsedWards.length > 0 ? parsedWards : [1],
+      affectedWards: affectedWards.length > 0 ? affectedWards : [1],
       affectedArea: affectedArea.trim() || "All Wards",
       department: department.trim() || "Technical Services",
       departmentManager: departmentManager.trim() || "N/A",
@@ -368,12 +363,18 @@ export default function ServiceNoticeManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Responsible Department</label>
-                  <input
-                    type="text"
+                  <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium"
-                  />
+                    className="w-full border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium bg-white"
+                  >
+                    <option value="" disabled>Select a department</option>
+                    {getDepartments().map((dept) => (
+                      <option key={dept.id || dept.name} value={dept.name}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Department Manager</label>
@@ -419,17 +420,40 @@ export default function ServiceNoticeManagement() {
 
               {/* Wards & Affected Area */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Affected Wards (Comma separated)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 1, 2, 5"
-                    value={affectedWards}
-                    onChange={(e) => setAffectedWards(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium"
-                  />
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="font-bold text-slate-700 flex justify-between items-center mb-1">
+                    <span>Affected Wards (Select Wards)</span>
+                    <span className="text-[10px] text-slate-500 font-normal">{affectedWards.length} selected</span>
+                  </label>
+                  <div className="border border-slate-300 rounded-xl p-3 max-h-48 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50/50">
+                    {getWards().map((ward) => {
+                      const isSelected = affectedWards.includes(ward.wardNumber);
+                      return (
+                        <label 
+                          key={ward.wardNumber}
+                          className={`flex items-center space-x-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                            isSelected ? "bg-blue-50 border-blue-200 text-blue-900 font-bold" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                setAffectedWards(affectedWards.filter(w => w !== ward.wardNumber));
+                              } else {
+                                setAffectedWards([...affectedWards, ward.wardNumber]);
+                              }
+                            }}
+                            className="rounded border-slate-300 text-gov-blue focus:ring-gov-blue"
+                          />
+                          <span className="truncate">Ward {ward.wardNumber} - {ward.wardName}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 sm:col-span-2">
                   <label className="font-bold text-slate-700">Affected Area Description</label>
                   <input
                     type="text"

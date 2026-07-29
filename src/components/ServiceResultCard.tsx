@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { APIProvider, Map, AdvancedMarker, Pin } from "@vis.gl/react-google-maps";
 import { Complaint, ServiceNotice } from "../types";
 import { 
   Calendar, 
@@ -25,11 +26,23 @@ import {
   ChevronUp, 
   Mail, 
   User, 
-  Map, 
+  Map as MapIcon, 
   Info,
   Timer
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+
+const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
+const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
+
+const parseGpsCoordinates = (coordsStr?: string) => {
+  if (!coordsStr) return null;
+  const parts = coordsStr.split(',').map(s => parseFloat(s.trim()));
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return { lat: parts[0], lng: parts[1] };
+  }
+  return null;
+};
 
 interface ServiceResultCardProps {
   key?: string;
@@ -436,55 +449,32 @@ export default function ServiceResultCard({ record }: ServiceResultCardProps) {
               {gpsCoordinates && (
                 <div className="space-y-2">
                   <h5 className="font-extrabold text-[10px] text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <Map size={12} className="text-slate-400" />
+                    <MapIcon size={12} className="text-slate-400" />
                     GIS Geolocation Coordinate Mapping
                   </h5>
                   <div className="bg-slate-100 border border-slate-200 rounded-xl overflow-hidden p-1 relative">
-                    {/* Simulated visual high-end mini-map */}
-                    <div className="bg-[#E5E9F0] h-32 rounded-lg relative overflow-hidden flex flex-col justify-between p-3 border border-slate-300/60 shadow-inner">
-                      {/* Abstract grid lines simulating a blueprint/GIS grid */}
-                      <div className="absolute inset-0 opacity-10" style={{ 
-                        backgroundImage: "radial-gradient(#000 1px, transparent 1px)", 
-                        backgroundSize: "16px 16px" 
-                      }} />
-                      {/* Abstract river/road simulation */}
-                      <div className="absolute left-1/4 top-0 bottom-0 w-3 bg-[#4A90E2]/20 blur-[1px] rotate-12" />
-                      <div className="absolute left-0 right-0 top-1/2 h-4 bg-slate-300/40 -rotate-6" />
-
-                      {/* Map badge details */}
-                      <div className="bg-white/90 backdrop-blur-xs text-[9px] px-2 py-1 rounded-md shadow-sm border border-slate-200 z-10 self-start font-bold">
-                        🎯 GIS Fixed Node: {gpsCoordinates}
+                    {hasValidKey && parseGpsCoordinates(gpsCoordinates) ? (
+                      <div className="h-32 rounded-lg overflow-hidden relative border border-slate-300/60 shadow-inner">
+                        <APIProvider apiKey={API_KEY}>
+                          <Map
+                            zoom={14}
+                            center={parseGpsCoordinates(gpsCoordinates)!}
+                            gestureHandling="none"
+                            disableDefaultUI={true}
+                            mapId="DEMO_MAP_ID"
+                            className="w-full h-full"
+                          >
+                            <AdvancedMarker position={parseGpsCoordinates(gpsCoordinates)!}>
+                              <Pin background="#DC2626" glyphColor="#FFFFFF" borderColor="#7F1D1D" />
+                            </AdvancedMarker>
+                          </Map>
+                        </APIProvider>
                       </div>
-
-                      {/* Pulsing Pin Indicator */}
-                      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10">
-                        <span className="flex h-3 w-3 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
-                        </span>
-                        <span className="bg-red-600 text-white font-mono text-[8px] font-extrabold px-1.5 py-0.5 rounded shadow mt-1 uppercase tracking-wide whitespace-nowrap">
-                          {category} Event Pin
-                        </span>
+                    ) : (
+                      <div className="h-32 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-semibold border border-slate-200">
+                        Map unavailable
                       </div>
-
-                      {/* Map controls preview */}
-                      <div className="flex justify-between items-end w-full mt-auto z-10">
-                        <div className="flex gap-1">
-                          <button disabled className="w-5 h-5 bg-white rounded shadow text-[9px] font-extrabold flex items-center justify-center border border-slate-200 text-slate-400">+</button>
-                          <button disabled className="w-5 h-5 bg-white rounded shadow text-[9px] font-extrabold flex items-center justify-center border border-slate-200 text-slate-400">-</button>
-                        </div>
-                        
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${gpsCoordinates}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="bg-gov-blue hover:bg-gov-blue-hover text-white text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded shadow-md flex items-center gap-1 transition-colors"
-                        >
-                          <ExternalLink size={10} />
-                          Open Live Map
-                        </a>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )}

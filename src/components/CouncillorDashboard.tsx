@@ -4,6 +4,7 @@ import {
   saveComplaints, 
   getNotifications, 
   saveNotifications, 
+  deleteNotification,
   getWards, 
   saveWards,
   addAuditLog, 
@@ -546,17 +547,18 @@ export default function CouncillorDashboard({
     setSelectedComplaint(updatedMatched || null);
   };
 
-  const handleMarkNotificationsRead = () => {
-    const allNotifs = getNotifications();
-    const updated = allNotifs.map(n => {
-      if (n.userId === currentUser.id || n.userId === "all") {
-        return { ...n, isRead: true };
-      }
-      return n;
-    });
-    saveNotifications(updated);
-    loadCrmData();
-    onAddToast("Notifications Cleared", "All unread alert banners marked as read.", "info");
+  const handleClearAllNotifications = async () => {
+    const toDelete = [...notifications];
+    for (const n of toDelete) {
+      await deleteNotification(n.id);
+    }
+    setNotifications([]);
+    onAddToast("Notifications Cleared", "All visible notifications have been removed.", "info");
+  };
+
+  const handleDismissNotification = async (id: string) => {
+    await deleteNotification(id);
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   const handleProfileUpdate = (e: React.FormEvent) => {
@@ -915,9 +917,9 @@ export default function CouncillorDashboard({
                     <Bell size={14} className="mr-1.5 text-gov-green" />
                     <span>Recent Notifications</span>
                   </h3>
-                  {notifications.filter(n => !n.isRead).length > 0 && (
+                  {notifications.length > 0 && (
                     <button 
-                      onClick={handleMarkNotificationsRead}
+                      onClick={handleClearAllNotifications}
                       className="text-[9px] font-bold text-gov-blue uppercase tracking-wider hover:underline"
                     >
                       Clear All
@@ -939,7 +941,16 @@ export default function CouncillorDashboard({
                           !n.isRead ? "bg-amber-50/50 border-l-4 border-l-gov-yellow border-slate-200" : "bg-slate-50/50 border-slate-100"
                         }`}
                       >
-                        <h4 className="font-bold text-slate-900 text-[11px]">{n.title}</h4>
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-bold text-slate-900 text-[11px] pr-2">{n.title}</h4>
+                          <button
+                            onClick={() => handleDismissNotification(n.id)}
+                            className="text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors -mr-1 -mt-1 flex-shrink-0"
+                            title="Dismiss notification"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
                         <p className="text-[10px] text-slate-600 mt-0.5">{n.message}</p>
                         <span className="block text-[8px] text-slate-400 font-mono mt-1 text-right">
                           {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -1678,12 +1689,12 @@ export default function CouncillorDashboard({
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">Receive immediate automated alerts regarding complaint assignments, updates, and municipal notices.</p>
               </div>
-              {notifications.filter(n => !n.isRead).length > 0 && (
+              {notifications.length > 0 && (
                 <button
-                  onClick={handleMarkNotificationsRead}
+                  onClick={handleClearAllNotifications}
                   className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg uppercase tracking-wider"
                 >
-                  Clear Unread
+                  Clear All
                 </button>
               )}
             </div>
@@ -1701,7 +1712,7 @@ export default function CouncillorDashboard({
                       !n.isRead ? "bg-amber-50/40 border-l-4 border-l-gov-yellow border-slate-200" : "bg-slate-50/40 border-slate-100"
                     }`}
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1 flex-1 pr-4">
                       <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-mono uppercase tracking-wider ${
                         n.type === "success" ? "bg-emerald-100 text-emerald-800"
                           : n.type === "alert" ? "bg-red-100 text-red-800"
@@ -1724,9 +1735,18 @@ export default function CouncillorDashboard({
                         </button>
                       )}
                     </div>
-                    <span className="text-[9px] text-slate-400 font-mono flex-shrink-0 mt-1 pl-4">
-                      {new Date(n.timestamp).toLocaleDateString("en-ZA")} {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0 mt-1">
+                      <button
+                        onClick={() => handleDismissNotification(n.id)}
+                        className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors"
+                        title="Dismiss notification"
+                      >
+                        <X size={14} />
+                      </button>
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        {new Date(n.timestamp).toLocaleDateString("en-ZA")} {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
                   </div>
                 ))
               )}

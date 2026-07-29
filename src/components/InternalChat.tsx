@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage, isFirebaseEnabled } from "../firebase";
 import { 
   getChatRooms, 
   saveChatRooms, 
@@ -52,6 +54,7 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; url: string; type: string }[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load chat data
   const loadChatData = () => {
@@ -373,16 +376,52 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
     setMessages(updated);
   };
 
-  // Simulate file attachment
-  const simulateAttachment = () => {
-    const fileOptions = [
-      { name: "IDP_Amendment_Report.pdf", type: "pdf", url: "https://www.thulamela.gov.za/IDP_Report.pdf" },
-      { name: "site_inspection_photo.jpg", type: "image", url: "https://images.unsplash.com/photo-1590069261209-f8e9b8642343?auto=format&fit=crop&q=80&w=300" },
-      { name: "voice_note_feedback.mp3", type: "voice", url: "https://www.thulamela.gov.za/voice_note.mp3" }
-    ];
-    const chosen = fileOptions[Math.floor(Math.random() * fileOptions.length)];
-    setAttachedFiles([...attachedFiles, chosen]);
-    onAddToast("File Attached", `Successfully attached file: ${chosen.name}`, "info");
+  // Real file attachment handling
+  const handleAttachmentClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const roomId = activeRoomId || "general";
+
+    // Show upload-in-progress toast
+    onAddToast("Uploading Attachment", `Uploading ${file.name}...`, "info");
+
+    let fileUrl = "";
+    const fileType = file.type.startsWith("image/") 
+      ? "image" 
+      : file.type.startsWith("audio/") 
+      ? "audio" 
+      : file.type.includes("pdf") 
+      ? "pdf" 
+      : file.type;
+
+    try {
+      if (isFirebaseEnabled && storage) {
+        const storagePath = `chat-attachments/${roomId}/${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, storagePath);
+        const snapshot = await uploadBytes(storageRef, file);
+        fileUrl = await getDownloadURL(snapshot.ref);
+        onAddToast("File Uploaded", `Successfully uploaded: ${file.name}`, "success");
+      } else {
+        fileUrl = URL.createObjectURL(file);
+        onAddToast("File Attached", `Attached file: ${file.name}`, "info");
+      }
+    } catch (error) {
+      console.error("Firebase storage upload error, using local object URL fallback:", error);
+      fileUrl = URL.createObjectURL(file);
+      onAddToast("File Attached", `Attached file locally: ${file.name}`, "warning");
+    }
+
+    setAttachedFiles(prev => [...prev, { name: file.name, url: fileUrl, type: fileType }]);
+
+    if (e.target) {
+      e.target.value = "";
+    }
   };
 
   // Get Room Icon
@@ -728,9 +767,16 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
               )}
 
               <div className="flex items-center space-x-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*,application/pdf,audio/*"
+                  className="hidden"
+                />
                 <button
                   type="button"
-                  onClick={simulateAttachment}
+                  onClick={handleAttachmentClick}
                   className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
                   title="Attach Documents or Photos"
                 >

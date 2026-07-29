@@ -6,11 +6,14 @@ import {
   saveTechnicians, 
   addAuditLog, 
   addNotification,
+  getNotifications,
+  saveNotifications,
+  deleteNotification,
   getSyncStatus,
   getChatRooms,
   saveChatRooms
 } from "../db";
-import { User, Complaint, Technician, ComplaintLog, ComplaintComment, ComplaintStatus, ComplaintPriority, UserRole, ChatRoom } from "../types";
+import { User, Complaint, Technician, ComplaintLog, ComplaintComment, ComplaintStatus, ComplaintPriority, UserRole, ChatRoom, Notification } from "../types";
 import { Skeleton, SkeletonCard, DashboardSkeleton } from "./Skeleton";
 import { 
   LayoutDashboard,
@@ -42,7 +45,8 @@ import {
   MessageSquare,
   Map,
   Folder,
-  Clipboard
+  Clipboard,
+  Bell
 } from "lucide-react";
 
 import InternalChat from "./InternalChat";
@@ -50,6 +54,9 @@ import MunicipalCalendar from "./MunicipalCalendar";
 import InteractiveGIS from "./InteractiveGIS";
 import DocumentManager from "./DocumentManager";
 import DigitalForms from "./DigitalForms";
+import FileUploader from "./FileUploader";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage, isFirebaseEnabled } from "../firebase";
 
 interface TechnicianDashboardProps {
   currentUser: User;
@@ -58,7 +65,7 @@ interface TechnicianDashboardProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
-type TechTab = "dashboard" | "assigned" | "schedule" | "completed" | "reports" | "profile" | "settings" | "chat" | "calendar" | "gis" | "documents" | "digital_forms";
+type TechTab = "dashboard" | "assigned" | "schedule" | "completed" | "reports" | "profile" | "settings" | "chat" | "calendar" | "gis" | "documents" | "digital_forms" | "notifications";
 
 export default function TechnicianDashboard({
   currentUser,
@@ -69,6 +76,7 @@ export default function TechnicianDashboard({
   const [activeTab, setActiveTab] = useState<TechTab>("dashboard");
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [activeChatRoomId, setActiveChatRoomId] = useState<string>("");
   const [techProfile, setTechProfile] = useState<Technician | null>(null);
@@ -85,8 +93,49 @@ export default function TechnicianDashboard({
   const [progressNotes, setProgressNotes] = useState("");
   const [progressMediaUrl, setProgressMediaUrl] = useState("");
   const [progressMediaType, setProgressMediaType] = useState<"photo" | "video" | "voicenote">("photo");
+  const [progressFiles, setProgressFiles] = useState<File[]>([]);
   const [estCompletionDate, setEstCompletionDate] = useState("");
   const [showProgressModal, setShowProgressModal] = useState(false);
+
+  const getProgressAllowedTypes = () => {
+    if (progressMediaType === "photo") {
+      return ["image/jpeg", "image/png"];
+    }
+    if (progressMediaType === "video") {
+      return ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"];
+    }
+    return ["audio/mpeg", "audio/wav", "audio/mp3", "audio/ogg"];
+  };
+
+  const handleProgressFilesChange = async (newFiles: File[]) => {
+    setProgressFiles(newFiles);
+    if (newFiles.length > 0) {
+      const file = newFiles[newFiles.length - 1];
+      const complaintId = selectedComplaint?.id || "general";
+      onAddToast("Uploading Media", `Uploading ${file.name}...`, "info");
+      try {
+        if (isFirebaseEnabled && storage) {
+          const storagePath = `progress-media/${complaintId}/${Date.now()}_${file.name}`;
+          const storageRef = ref(storage, storagePath);
+          const snapshot = await uploadBytes(storageRef, file);
+          const downloadUrl = await getDownloadURL(snapshot.ref);
+          setProgressMediaUrl(downloadUrl);
+          onAddToast("Upload Complete", "Media uploaded to Firebase Storage successfully.", "success");
+        } else {
+          const localUrl = URL.createObjectURL(file);
+          setProgressMediaUrl(localUrl);
+          onAddToast("Media Attached", "Local media file attached successfully.", "info");
+        }
+      } catch (err) {
+        console.error("Firebase Storage upload error, falling back to local object URL:", err);
+        const localUrl = URL.createObjectURL(file);
+        setProgressMediaUrl(localUrl);
+        onAddToast("Media Attached", "Attached local media file.", "warning");
+      }
+    } else {
+      setProgressMediaUrl("");
+    }
+  };
 
   // Material Request States
   const [materialType, setMaterialType] = useState("Pipes & Couplings");
@@ -117,6 +166,14 @@ export default function TechnicianDashboard({
     setComplaints(myComps);
     setTechnicians(allTechs);
 
+    const allNotifs = getNotifications();
+    const myNotifs = allNotifs.filter(n => {
+      if (n.userId === currentUser.id || n.userId === "all") return true;
+      if (n.role === currentUser.role) return true;
+      return false;
+    });
+    setNotifications(myNotifs);
+
     const currentTech = allTechs.find(t => t.id === currentUser.id);
     if (currentTech) {
       setTechProfile(currentTech);
@@ -135,6 +192,20 @@ export default function TechnicianDashboard({
       };
       setTechProfile(fallbackTech);
     }
+  };
+
+  const handleClearAllNotifications = async () => {
+    const toDelete = [...notifications];
+    for (const n of toDelete) {
+      await deleteNotification(n.id);
+    }
+    setNotifications([]);
+    onAddToast("Notifications Cleared", "All visible notifications have been removed.", "info");
+  };
+
+  const handleDismissNotification = async (id: string) => {
+    await deleteNotification(id);
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   useEffect(() => {
@@ -420,6 +491,7 @@ export default function TechnicianDashboard({
     setShowProgressModal(false);
     setProgressNotes("");
     setProgressMediaUrl("");
+    setProgressFiles([]);
     loadTechData();
     if (selectedComplaint && selectedComplaint.id === complaintId) {
       const updatedComp = updated.find(c => c.id === complaintId);
@@ -682,6 +754,22 @@ export default function TechnicianDashboard({
             >
               <CheckCircle2 size={16} />
               <span>Completed Jobs</span>
+            </button>
+
+            <button
+              id="tech-tab-notifications"
+              onClick={() => setActiveTab("notifications")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+                activeTab === "notifications" ? "bg-gov-blue text-white shadow-md" : "hover:bg-slate-800 hover:text-white text-slate-400"
+              }`}
+            >
+              <Bell size={16} />
+              <span>Notifications</span>
+              {notifications.filter(n => !n.isRead).length > 0 && (
+                <span className="ml-auto bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
+                  {notifications.filter(n => !n.isRead).length}
+                </span>
+              )}
             </button>
 
             <button
@@ -1193,6 +1281,81 @@ export default function TechnicianDashboard({
           </div>
         )}
 
+        {activeTab === "notifications" && (
+          <div id="tab-pane-notifications" className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 space-y-6">
+            <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center">
+                  <Bell className="mr-2 text-gov-yellow" size={22} />
+                  <span>Notification Center</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Receive immediate automated alerts regarding complaint assignments, updates, and municipal notices.</p>
+              </div>
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAllNotifications}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg uppercase tracking-wider"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {notifications.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 font-bold">
+                  Your notification archive is completely empty.
+                </div>
+              ) : (
+                notifications.map((n) => (
+                  <div 
+                    key={n.id}
+                    className={`p-4 rounded-xl border text-xs flex justify-between items-start leading-relaxed transition-all ${
+                      !n.isRead ? "bg-amber-50/40 border-l-4 border-l-gov-yellow border-slate-200" : "bg-slate-50/40 border-slate-100"
+                    }`}
+                  >
+                    <div className="space-y-1 flex-1 pr-4">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-mono uppercase tracking-wider ${
+                        n.type === "success" ? "bg-emerald-100 text-emerald-800"
+                          : n.type === "alert" ? "bg-red-100 text-red-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}>
+                        {n.type}
+                      </span>
+                      <h4 className="font-bold text-slate-950 text-sm mt-1">{n.title}</h4>
+                      <p className="text-slate-600 mt-0.5">{n.message}</p>
+                      {n.complaintId && (
+                        <button
+                          onClick={() => {
+                            const comps = getComplaints();
+                            const matched = comps.find(c => c.id === n.complaintId);
+                            if (matched) setSelectedComplaint(matched);
+                          }}
+                          className="text-gov-blue hover:underline font-bold font-mono text-[10px] mt-1.5 block"
+                        >
+                          View Related Ticket {n.complaintId} →
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0 mt-1">
+                      <button
+                        onClick={() => handleDismissNotification(n.id)}
+                        className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors"
+                        title="Dismiss notification"
+                      >
+                        <X size={14} />
+                      </button>
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        {new Date(n.timestamp).toLocaleDateString("en-ZA")} {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === "chat" && (
           <InternalChat 
             currentUser={currentUser} 
@@ -1569,11 +1732,14 @@ export default function TechnicianDashboard({
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Simulate Upload field media (URL or placeholder)</label>
-                <div className="flex space-x-1 mb-1.5">
+                <label className="font-bold text-slate-700 block mb-1">Upload Field Media</label>
+                <div className="flex space-x-1 mb-2">
                   <button 
                     type="button"
-                    onClick={() => setProgressMediaType("photo")}
+                    onClick={() => {
+                      setProgressMediaType("photo");
+                      setProgressFiles([]);
+                    }}
                     className={`flex-1 p-1.5 rounded border text-[9px] font-bold uppercase tracking-wider flex items-center justify-center ${
                       progressMediaType === "photo" ? "bg-gov-blue text-white" : "bg-slate-50 hover:bg-slate-100"
                     }`}
@@ -1582,7 +1748,10 @@ export default function TechnicianDashboard({
                   </button>
                   <button 
                     type="button"
-                    onClick={() => setProgressMediaType("video")}
+                    onClick={() => {
+                      setProgressMediaType("video");
+                      setProgressFiles([]);
+                    }}
                     className={`flex-1 p-1.5 rounded border text-[9px] font-bold uppercase tracking-wider flex items-center justify-center ${
                       progressMediaType === "video" ? "bg-gov-blue text-white" : "bg-slate-50 hover:bg-slate-100"
                     }`}
@@ -1591,7 +1760,10 @@ export default function TechnicianDashboard({
                   </button>
                   <button 
                     type="button"
-                    onClick={() => setProgressMediaType("voicenote")}
+                    onClick={() => {
+                      setProgressMediaType("voicenote");
+                      setProgressFiles([]);
+                    }}
                     className={`flex-1 p-1.5 rounded border text-[9px] font-bold uppercase tracking-wider flex items-center justify-center ${
                       progressMediaType === "voicenote" ? "bg-gov-blue text-white" : "bg-slate-50 hover:bg-slate-100"
                     }`}
@@ -1600,31 +1772,13 @@ export default function TechnicianDashboard({
                   </button>
                 </div>
 
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    placeholder="Pre-loaded evidence photo URL..."
-                    value={progressMediaUrl}
-                    onChange={(e) => setProgressMediaUrl(e.target.value)}
-                    className="flex-grow bg-slate-50 border border-slate-200 rounded-lg p-2 font-semibold text-base"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      if (progressMediaType === "photo") {
-                        setProgressMediaUrl("https://images.unsplash.com/photo-1541535650810-10d26f5c2ab3?w=500");
-                      } else if (progressMediaType === "video") {
-                        setProgressMediaUrl("https://www.w3schools.com/html/mov_bbb.mp4");
-                      } else {
-                        setProgressMediaUrl("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
-                      }
-                      onAddToast("Media Simulation", "Simulated media upload attached successfully.", "info");
-                    }}
-                    className="px-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg text-[9px]"
-                  >
-                    Auto-Fill
-                  </button>
-                </div>
+                <FileUploader
+                  files={progressFiles}
+                  setFiles={handleProgressFilesChange}
+                  maxFiles={1}
+                  allowedTypes={getProgressAllowedTypes()}
+                  onAddToast={onAddToast}
+                />
               </div>
 
               <div>

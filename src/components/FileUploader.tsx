@@ -9,7 +9,11 @@ const DEFAULT_ALLOWED_TYPES = [
   'video/mp4', 
   'video/quicktime', 
   'video/x-msvideo', 
-  'video/webm'
+  'video/webm',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp3',
+  'audio/ogg'
 ];
 
 interface FileUploaderProps {
