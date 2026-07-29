@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { Check } from "lucide-react";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db, isFirebaseEnabled } from "../firebase";
+import { handleFirestoreError, OperationType } from "../db";
 
 interface PublicFeedbackFormProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
@@ -17,7 +20,7 @@ export default function PublicFeedbackForm({ onAddToast }: PublicFeedbackFormPro
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) {
       onAddToast("Validation Error", "Please fill in all mandatory fields.", "warning");
@@ -25,9 +28,19 @@ export default function PublicFeedbackForm({ onAddToast }: PublicFeedbackFormPro
     }
 
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      if (isFirebaseEnabled && db) {
+        await addDoc(collection(db, "publicInquiries"), {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          wardNumber: formData.wardNumber,
+          subject: formData.subject,
+          message: formData.message,
+          submittedAt: serverTimestamp()
+        });
+      }
+
       setSuccess(true);
       onAddToast(
         "Feedback Submitted Successfully",
@@ -43,7 +56,17 @@ export default function PublicFeedbackForm({ onAddToast }: PublicFeedbackFormPro
         subject: "Service Inquiry",
         message: ""
       });
-    }, 1200);
+    } catch (error) {
+      console.error("Error writing to publicInquiries collection:", error);
+      try {
+        handleFirestoreError(error, OperationType.WRITE, "publicInquiries");
+      } catch (e) {
+        // Ignored after logging
+      }
+      onAddToast("Submission Error", "Failed to log feedback inquiry. Please try again.", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

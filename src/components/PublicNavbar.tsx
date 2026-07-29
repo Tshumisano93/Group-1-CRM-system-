@@ -23,6 +23,8 @@ export default function PublicNavbar({
 
   const navItems = [
     { id: "home", label: "Home" },
+    { id: "report", label: "Report an Issue" },
+    { id: "track", label: "Track My Complaint" },
     { id: "about", label: "About Municipality" },
     { id: "services", label: "Municipal Services" },
     { id: "contact", label: "Contact Us" }

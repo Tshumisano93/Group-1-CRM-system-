@@ -60,10 +60,25 @@ service cloud.firestore {
           && data.title is string && data.title.size() <= 200
           && data.description is string && data.description.size() <= 2000
           && data.category is string && data.category.size() <= 128
+          && data.departmentId is string
           && data.wardNumber is int
           && data.reporterId is string && data.reporterId.size() <= 128
           && data.status is string && data.status.size() <= 64
           && data.priority is string && (data.priority == 'Low' || data.priority == 'Medium' || data.priority == 'High' || data.priority == 'Critical' || data.priority == 'Emergency');
+    }
+
+    function isValidPublicComplaint(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 2000
+          && data.category is string && data.category.size() <= 128
+          && data.wardNumber is int
+          && data.reporterId == 'PUBLIC'
+          && data.status == 'New'
+          && data.departmentId == null
+          && data.assignedTechnicianId == null
+          && data.citizenName is string && data.citizenName.size() <= 128
+          && data.citizenContactNumber is string && data.citizenContactNumber.size() <= 64;
     }
 
     function isValidNotification(data) {
@@ -198,8 +213,10 @@ service cloud.firestore {
     }
 
     match /complaints/{complaintId} {
-      allow read: if isSignedIn();
+      allow get: if (isSignedIn() && (!isTechnician() || resource.data.departmentId == getUserData().departmentId)) || true;
+      allow list: if isSignedIn() && (!isTechnician() || resource.data.departmentId == getUserData().departmentId);
       allow create: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming());
+      allow create: if isValidId(complaintId) && isValidPublicComplaint(incoming());
       allow update: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming()) && (
         isAdmin() || 
         (
@@ -207,7 +224,11 @@ service cloud.firestore {
           existing().reporterId == request.auth.uid &&
           incoming().reporterId == existing().reporterId
         ) ||
-        (isTechnician() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolutionNotes', 'verificationComments', 'dateUpdated', 'logs', 'comments']))
+        (
+          isTechnician() &&
+          existing().departmentId == getUserData().departmentId &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolutionNotes', 'verificationComments', 'dateUpdated', 'logs', 'comments'])
+        )
       );
       allow delete: if isAdmin();
     }

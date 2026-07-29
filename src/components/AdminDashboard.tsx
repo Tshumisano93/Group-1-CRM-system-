@@ -48,7 +48,8 @@ import {
   Map,
   Folder,
   Clipboard,
-  CheckSquare
+  CheckSquare,
+  Download
 } from "lucide-react";
 
 import InternalChat from "./InternalChat";
@@ -703,6 +704,49 @@ export default function AdminDashboard({
     
     return matchesSearch && matchesStatus && matchesWard;
   });
+
+  const handleDownloadComplaintsReport = () => {
+    const headers = [
+      "Reference Number",
+      "Title",
+      "Category",
+      "Ward",
+      "Status",
+      "Priority",
+      "Date Reported",
+      "Assigned Technician"
+    ];
+
+    const escapeCsv = (val: string | number | undefined | null) => {
+      if (val === undefined || val === null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filteredComplaints.map(comp => [
+      escapeCsv(comp.id),
+      escapeCsv(comp.title),
+      escapeCsv(comp.category),
+      escapeCsv(`Ward ${comp.wardNumber}${comp.wardName ? ` (${comp.wardName})` : ''}`),
+      escapeCsv(comp.status),
+      escapeCsv(comp.priority),
+      escapeCsv(comp.dateCreated ? new Date(comp.dateCreated).toLocaleDateString() : ''),
+      escapeCsv(comp.assignedTechnicianName || "Awaiting Dispatch")
+    ]);
+
+    const csvContent = [headers.map(h => `"${h}"`).join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `complaints_report_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    onAddToast("Report Exported", `Downloaded ${filteredComplaints.length} complaint record(s) as CSV.`, "success");
+  };
 
   const getStatusBadge = (status: ComplaintStatus) => {
     switch (status) {
@@ -1483,6 +1527,16 @@ export default function AdminDashboard({
                   <option value="Resolved">Resolved</option>
                   <option value="Closed">Closed</option>
                 </select>
+
+                <button
+                  id="btn-download-complaints-report"
+                  type="button"
+                  onClick={handleDownloadComplaintsReport}
+                  className="px-3.5 py-2 bg-gov-blue hover:bg-gov-blue-hover text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 transition-all shadow-sm"
+                >
+                  <Download size={14} />
+                  <span>Download Report</span>
+                </button>
               </div>
             </div>
 

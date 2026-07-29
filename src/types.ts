@@ -57,6 +57,7 @@ export interface Technician {
 }
 
 export type ComplaintStatus = 
+  | "New"
   | "Draft" 
   | "Submitted" 
   | "Received" 

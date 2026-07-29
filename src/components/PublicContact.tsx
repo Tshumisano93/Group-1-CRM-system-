@@ -1,10 +1,15 @@
 import React from "react";
 import { Mail, Phone, MapPin, Clock, ShieldAlert } from "lucide-react";
+import { APIProvider, Map, AdvancedMarker, Pin, ControlPosition } from "@vis.gl/react-google-maps";
 import PublicFeedbackForm from "./PublicFeedbackForm";
 
 interface PublicContactProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
+
+const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
+const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
+const OFFICE_COORDS = { lat: -22.9786, lng: 30.4578 };
 
 export default function PublicContact({ onAddToast }: PublicContactProps) {
   const emergencyContacts = [
@@ -113,17 +118,35 @@ export default function PublicContact({ onAddToast }: PublicContactProps) {
       {/* Interactive Map */}
       <div id="maps-section" className="bg-white rounded-2xl border border-slate-100 shadow-sm p-1.5">
         <div className="relative h-96 rounded-xl overflow-hidden border border-slate-200">
-          <iframe
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3557.551608682121!2d30.4578130752179!3d-22.97858693489873!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x1ec379e49a882f05%3A0x88924b2787d54e4c!2sThulamela+Local+Municipality+Civic+Centre!5e0!3m2!1sen!2sza!4v1720686900000!5m2!1sen!2sza"
-            width="100%"
-            height="100%"
-            style={{ border: 0 }}
-            allowFullScreen={true}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            title="Thulamela Municipality Location"
-            className="rounded-xl"
-          ></iframe>
+          {hasValidKey ? (
+            <APIProvider apiKey={API_KEY} version="weekly">
+              <Map
+                defaultCenter={OFFICE_COORDS}
+                defaultZoom={15}
+                mapId="PUBLIC_CONTACT_MAP"
+                style={{ width: "100%", height: "100%" }}
+                mapTypeControl={true}
+                defaultMapTypeId="roadmap"
+                mapTypeControlOptions={{ position: ControlPosition.TOP_RIGHT }}
+              >
+                <AdvancedMarker position={OFFICE_COORDS}>
+                  <Pin background={"#004d25"} glyphColor={"#ffffff"} borderColor={"#000000"} />
+                </AdvancedMarker>
+              </Map>
+            </APIProvider>
+          ) : (
+            <iframe
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3557.551608682121!2d30.4578130752179!3d-22.97858693489873!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x1ec379e49a882f05%3A0x88924b2787d54e4c!2sThulamela+Local+Municipality+Civic+Centre!5e0!3m2!1sen!2sza!4v1720686900000!5m2!1sen!2sza"
+              width="100%"
+              height="100%"
+              style={{ border: 0 }}
+              allowFullScreen={true}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              title="Thulamela Municipality Location"
+              className="rounded-xl"
+            ></iframe>
+          )}
         </div>
         
         {/* Contact details below map */}

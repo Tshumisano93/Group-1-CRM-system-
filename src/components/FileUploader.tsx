@@ -6,19 +6,30 @@ interface FileUploaderProps {
   setFiles: (files: File[]) => void;
   maxFiles?: number;
   maxSizeBytes?: number;
+  onAddToast?: (title: string, message: string, type?: "success" | "info" | "warning" | "error") => void;
 }
 
-export default function FileUploader({ files, setFiles, maxFiles = 10, maxSizeBytes = 100 * 1024 * 1024 }: FileUploaderProps) {
+export default function FileUploader({ files, setFiles, maxFiles = 10, maxSizeBytes = 100 * 1024 * 1024, onAddToast }: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files) as File[];
-      const validFiles = newFiles.filter(file => {
+      const validFiles: File[] = [];
+
+      newFiles.forEach(file => {
         const isTypeValid = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'].includes(file.type);
         const isSizeValid = file.size <= maxSizeBytes;
-        return isTypeValid && isSizeValid;
+
+        if (!isSizeValid) {
+          onAddToast?.("File Upload Error", "Max file size 5MB", "error");
+        } else if (!isTypeValid) {
+          onAddToast?.("File Upload Error", "Please upload JPEG or PNG", "error");
+        } else {
+          validFiles.push(file);
+        }
       });
+
       setFiles([...files, ...validFiles].slice(0, maxFiles));
     }
   };

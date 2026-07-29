@@ -53,6 +53,10 @@ import DigitalForms from "./DigitalForms";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../firebase";
 import FileUploader from "./FileUploader";
+import { APIProvider, Map as GoogleMap, AdvancedMarker, Pin, ControlPosition } from "@vis.gl/react-google-maps";
+
+const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
+const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
 
 
 interface CouncillorDashboardProps {
@@ -1369,6 +1373,63 @@ export default function CouncillorDashboard({
                       onChange={(e) => setLandmark(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
                     />
+                  </div>
+                </div>
+
+                {/* Interactive Location Pin Map for Councillor Form */}
+                <div className="space-y-2 pt-2">
+                  <label className="font-bold text-slate-700 block text-xs uppercase tracking-wider">
+                    Interactive GPS Pin Drop
+                  </label>
+                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-inner h-60 relative bg-slate-100">
+                    {hasValidKey ? (
+                      <APIProvider apiKey={API_KEY} version="weekly">
+                        <GoogleMap
+                          defaultCenter={{ lat: -22.9786, lng: 30.4578 }}
+                          defaultZoom={13}
+                          mapId="COUNCILLOR_GPS_MAP"
+                          style={{ width: "100%", height: "100%" }}
+                          mapTypeControl={true}
+                          defaultMapTypeId="roadmap"
+                          mapTypeControlOptions={{ position: ControlPosition.TOP_RIGHT }}
+                          onClick={(e) => {
+                            if (e.detail.latLng) {
+                              setGpsCoordinates(`${e.detail.latLng.lat.toFixed(5)}, ${e.detail.latLng.lng.toFixed(5)}`);
+                            }
+                          }}
+                        >
+                          {(() => {
+                            if (gpsCoordinates) {
+                              const parts = gpsCoordinates.split(",").map((s) => parseFloat(s.trim()));
+                              if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                                const pos = { lat: parts[0], lng: parts[1] };
+                                return (
+                                  <AdvancedMarker
+                                    position={pos}
+                                    draggable={true}
+                                    onDragEnd={(e) => {
+                                      const newLat = e.latLng?.lat() ?? (e as any).detail?.latLng?.lat;
+                                      const newLng = e.latLng?.lng() ?? (e as any).detail?.latLng?.lng;
+                                      if (newLat != null && newLng != null) {
+                                        setGpsCoordinates(`${newLat.toFixed(5)}, ${newLng.toFixed(5)}`);
+                                      }
+                                    }}
+                                  >
+                                    <Pin background={"#004d25"} glyphColor={"#ffffff"} borderColor={"#000000"} />
+                                  </AdvancedMarker>
+                                );
+                              }
+                            }
+                            return null;
+                          })()}
+                        </GoogleMap>
+                      </APIProvider>
+                    ) : (
+                      <div className="w-full h-full bg-slate-200 flex flex-col items-center justify-center p-4 text-center">
+                        <MapPin size={24} className="text-slate-400 mb-2" />
+                        <span className="text-xs font-semibold text-slate-600">Google Maps API key required to view interactive map</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -13,6 +13,8 @@ import PublicHome from "./components/PublicHome";
 import PublicAbout from "./components/PublicAbout";
 import PublicServices from "./components/PublicServices";
 import PublicContact from "./components/PublicContact";
+import PublicComplaintForm from "./components/PublicComplaintForm";
+import PublicTracking from "./components/PublicTracking";
 import PublicWards from "./components/PublicWards";
 import ServiceDashboard from "./components/ServiceDashboard";
 
@@ -38,6 +40,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   "services": "/services",
   "wards": "/wards",
   "contact": "/contact",
+  "report": "/report",
+  "track": "/track",
   "councillor-login": "/login",
   "admin-login": "/admin",
   "councillor-dashboard": "/councillor-dashboard",
@@ -314,6 +318,34 @@ export default function App() {
                 </motion.div>
               }
             />
+            <Route
+              path="/report"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicComplaintForm onAddToast={addToast} onNavigate={handleNavigate} />
+                </motion.div>
+              }
+            />
+            <Route
+              path="/track"
+              element={
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <PublicTracking onAddToast={addToast} onNavigate={handleNavigate} />
+                </motion.div>
+              }
+            />
 
           <Route
             path="/login"
@@ -385,7 +417,7 @@ export default function App() {
         <PublicFooter onNavigate={handleNavigate} />
       )}
 
-      <div id="crm-toast-portal" className="fixed bottom-6 right-6 z-50 flex flex-col space-y-2.5 max-w-sm w-full">
+      <div id="crm-toast-portal" aria-live="polite" aria-atomic="true" className="fixed bottom-6 right-6 z-50 flex flex-col space-y-2.5 max-w-sm w-full">
         {toasts.map((toast) => (
           <div
             key={toast.id}
