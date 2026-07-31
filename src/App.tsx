@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { initializeDb, getCurrentUser, setCurrentUser, getUsers, saveUsers, migrateUserId, cleanCorruptedFirestoreUsers } from "./db";
 import { isFirebaseEnabled, auth, db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { User } from "./types";
+import { User, UserRole } from "./types";
 
 // Public Views
 import PublicNavbar from "./components/PublicNavbar";
@@ -26,6 +26,7 @@ import AdminLogin from "./components/AdminLogin";
 import CouncillorDashboard from "./components/CouncillorDashboard";
 import AdminDashboard from "./components/AdminDashboard";
 import TechnicianDashboard from "./components/TechnicianDashboard";
+import SubAdminDashboard from "./components/SubAdminDashboard";
 
 interface Toast {
   id: string;
@@ -47,6 +48,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   "councillor-dashboard": "/councillor-dashboard",
   "admin-dashboard": "/admin-dashboard",
   "technician-dashboard": "/technician-dashboard",
+  "sub-admin-dashboard": "/sub-admin-dashboard",
 };
 
 const PATH_TO_VIEW: Record<string, string> = Object.fromEntries(
@@ -59,13 +61,28 @@ function viewFromPath(pathname: string): string {
 
 function ProtectedRoute({
   currentUser,
+  allowedRoles,
+  loginPath = "/login",
   children,
 }: {
   currentUser: User | null;
+  allowedRoles: UserRole[];
+  loginPath?: string;
   children: React.ReactNode;
 }) {
   if (!currentUser) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={loginPath} replace />;
+  }
+  if (!allowedRoles.includes(currentUser.role)) {
+    if (currentUser.role === "councillor") {
+      return <Navigate to="/councillor-dashboard" replace />;
+    } else if (currentUser.role === "technician") {
+      return <Navigate to="/technician-dashboard" replace />;
+    } else if (currentUser.role === "sub_admin") {
+      return <Navigate to="/sub-admin-dashboard" replace />;
+    } else {
+      return <Navigate to="/admin-dashboard" replace />;
+    }
   }
   return <>{children}</>;
 }
@@ -215,21 +232,31 @@ export default function App() {
       navigate("/councillor-dashboard");
     } else if (user.role === "technician") {
       navigate("/technician-dashboard");
+    } else if (user.role === "sub_admin") {
+      navigate("/sub-admin-dashboard");
     } else {
       navigate("/admin-dashboard");
     }
   };
 
-  const handleNavigate = (view: string) => {
+  const handleNavigate = (view: string, param?: string, tab?: string) => {
     const path = VIEW_TO_PATH[view] ?? "/";
-    navigate(path);
+    let url = path;
+    const queryParams = [];
+    if (param) queryParams.push(`service=${param}`);
+    if (tab) queryParams.push(`tab=${tab}`);
+    if (queryParams.length > 0) {
+      url += `?${queryParams.join("&")}`;
+    }
+    navigate(url);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const isDashboardView =
     currentView === "councillor-dashboard" ||
     currentView === "admin-dashboard" ||
-    currentView === "technician-dashboard";
+    currentView === "technician-dashboard" ||
+    currentView === "sub-admin-dashboard";
 
   return (
     <div id="thulamela-crm-application-root" className="min-h-screen flex flex-col font-sans text-slate-800 bg-slate-50">
@@ -371,7 +398,7 @@ export default function App() {
           <Route
             path="/councillor-dashboard"
             element={
-              <ProtectedRoute currentUser={currentUser}>
+              <ProtectedRoute currentUser={currentUser} allowedRoles={["councillor"]} loginPath="/login">
                 <CouncillorDashboard
                   currentUser={currentUser as User}
                   onLogout={handleLogout}
@@ -384,7 +411,7 @@ export default function App() {
           <Route
             path="/technician-dashboard"
             element={
-              <ProtectedRoute currentUser={currentUser}>
+              <ProtectedRoute currentUser={currentUser} allowedRoles={["technician"]} loginPath="/admin">
                 <TechnicianDashboard
                   currentUser={currentUser as User}
                   onLogout={handleLogout}
@@ -397,8 +424,21 @@ export default function App() {
           <Route
             path="/admin-dashboard"
             element={
-              <ProtectedRoute currentUser={currentUser}>
+              <ProtectedRoute currentUser={currentUser} allowedRoles={["super_admin", "municipal_admin"]} loginPath="/admin">
                 <AdminDashboard
+                  currentUser={currentUser as User}
+                  onLogout={handleLogout}
+                  onNavigate={handleNavigate}
+                  onAddToast={addToast}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sub-admin-dashboard"
+            element={
+              <ProtectedRoute currentUser={currentUser} allowedRoles={["sub_admin"]} loginPath="/admin">
+                <SubAdminDashboard
                   currentUser={currentUser as User}
                   onLogout={handleLogout}
                   onNavigate={handleNavigate}

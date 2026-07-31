@@ -99,7 +99,7 @@ const getNoticeDetails = (notice: ServiceNotice) => {
 };
 
 interface PublicHomeProps {
-  onNavigate: (view: string, serviceId?: string) => void;
+  onNavigate: (view: string, serviceId?: string, tab?: string) => void;
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
@@ -236,7 +236,15 @@ export default function PublicHome({ onNavigate, onAddToast }: PublicHomeProps) 
                       <Droplets size={16} className="text-blue-600" />
                     </div>
                     <div className="flex-1"><p className="text-xs font-bold text-slate-800">Water Supply</p></div>
-                    <button className="text-[10px] font-bold text-gov-blue hover:underline">View SLA</button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigate("services", "water", "sla");
+                      }}
+                      className="text-[10px] font-bold text-gov-blue hover:underline"
+                    >
+                      View SLA
+                    </button>
                   </div>
                   <div 
                     onClick={() => onNavigate("services", "electricity")}
@@ -246,7 +254,15 @@ export default function PublicHome({ onNavigate, onAddToast }: PublicHomeProps) 
                       <Zap size={16} className="text-yellow-600" />
                     </div>
                     <div className="flex-1"><p className="text-xs font-bold text-slate-800">Electricity & Grid</p></div>
-                    <button className="text-[10px] font-bold text-gov-blue hover:underline">View SLA</button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigate("services", "electricity", "sla");
+                      }}
+                      className="text-[10px] font-bold text-gov-blue hover:underline"
+                    >
+                      View SLA
+                    </button>
                   </div>
                   <div 
                     onClick={() => onNavigate("services", "roads")}
@@ -256,7 +272,15 @@ export default function PublicHome({ onNavigate, onAddToast }: PublicHomeProps) 
                       <Truck size={16} className="text-emerald-600" />
                     </div>
                     <div className="flex-1"><p className="text-xs font-bold text-slate-800">Roads Maintenance</p></div>
-                    <button className="text-[10px] font-bold text-gov-blue hover:underline">View SLA</button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigate("services", "roads", "sla");
+                      }}
+                      className="text-[10px] font-bold text-gov-blue hover:underline"
+                    >
+                      View SLA
+                    </button>
                   </div>
                   <div 
                     onClick={() => onNavigate("services", "waste")}
@@ -266,7 +290,15 @@ export default function PublicHome({ onNavigate, onAddToast }: PublicHomeProps) 
                       <Trash2 size={16} className="text-amber-600" />
                     </div>
                     <div className="flex-1"><p className="text-xs font-bold text-slate-800">Waste Logistics</p></div>
-                    <button className="text-[10px] font-bold text-gov-blue hover:underline">View SLA</button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigate("services", "waste", "sla");
+                      }}
+                      className="text-[10px] font-bold text-gov-blue hover:underline"
+                    >
+                      View SLA
+                    </button>
                   </div>
                 </div>
               </div>

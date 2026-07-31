@@ -74,7 +74,7 @@ interface AdminDashboardProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
-type AdminTab = "dashboard" | "councillors" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices" | "notifications";
+type AdminTab = "dashboard" | "councillors" | "sub_admins" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices" | "notifications";
 
 export default function AdminDashboard({
   currentUser,
@@ -300,6 +300,125 @@ export default function AdminDashboard({
     }
     
     return await response.json();
+  };
+
+  // New Sub-Admin Form State
+  const [newSubAdminName, setNewSubAdminName] = useState("");
+  const [newSubAdminIdNumber, setNewSubAdminIdNumber] = useState("");
+  const [newSubAdminEmpNumber, setNewSubAdminEmpNumber] = useState("");
+  const [newSubAdminEmail, setNewSubAdminEmail] = useState("");
+  const [newSubAdminPhone, setNewSubAdminPhone] = useState("");
+  const [newSubAdminAddress, setNewSubAdminAddress] = useState("");
+  const [newSubAdminDepartmentId, setNewSubAdminDepartmentId] = useState("");
+  const [newSubAdminUsername, setNewSubAdminUsername] = useState("");
+  const [newSubAdminPassword, setNewSubAdminPassword] = useState("");
+  const [newSubAdminConfirmPassword, setNewSubAdminConfirmPassword] = useState("");
+  const [newSubAdminProfilePic, setNewSubAdminProfilePic] = useState("");
+  const [subAdminSearch, setSubAdminSearch] = useState("");
+
+  const handleCreateSubAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin") {
+      onAddToast("Unauthorized Action", "Only Administrators can provision Sub-Admin accounts.", "error");
+      return;
+    }
+
+    if (!newSubAdminName.trim() || !newSubAdminEmail.trim() || !newSubAdminUsername.trim() || !newSubAdminPassword.trim() || !newSubAdminDepartmentId.trim()) {
+      onAddToast("Validation Error", "Please fill in all mandatory fields, including selecting a department.", "warning");
+      return;
+    }
+
+    if (newSubAdminPassword !== newSubAdminConfirmPassword) {
+      onAddToast("Password Mismatch", "Password and Confirm Password inputs do not match.", "warning");
+      return;
+    }
+
+    const selectedDept = departments.find(d => d.id === newSubAdminDepartmentId);
+    const deptName = selectedDept ? selectedDept.name : "Municipal Department";
+
+    if (isFirebaseEnabled && auth) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const response = await fetch("/api/admin/users/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            email: newSubAdminEmail.trim(),
+            password: newSubAdminPassword,
+            name: newSubAdminName.trim(),
+            phone: newSubAdminPhone.trim(),
+            physicalAddress: newSubAdminAddress.trim() || "Thulamela Civic Centre",
+            username: newSubAdminUsername.trim(),
+            role: "sub_admin",
+            employeeNumber: newSubAdminEmpNumber.trim() || `EMP-SUB-${Date.now().toString().slice(-4)}`,
+            saIdNumber: newSubAdminIdNumber.trim(),
+            departmentId: newSubAdminDepartmentId,
+            departmentName: deptName,
+            profilePicture: newSubAdminProfilePic.trim()
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Failed to provision Sub-Admin account.");
+        }
+      } catch (err: any) {
+        onAddToast("Provisioning Failed", err.message, "error");
+        return;
+      }
+    } else {
+      const isDuplicateUsername = users.some(u => u.username.toLowerCase() === newSubAdminUsername.toLowerCase().trim());
+      if (isDuplicateUsername) {
+        onAddToast("Validation Error", `The username "${newSubAdminUsername}" already exists.`, "error");
+        return;
+      }
+      const isDuplicateEmail = users.some(u => u.email.toLowerCase() === newSubAdminEmail.toLowerCase().trim());
+      if (isDuplicateEmail) {
+        onAddToast("Validation Error", `The email address "${newSubAdminEmail}" already exists.`, "error");
+        return;
+      }
+
+      const newUserId = `SUB-${Date.now()}`;
+      const newUserObj: User = {
+        id: newUserId,
+        name: newSubAdminName.trim(),
+        email: newSubAdminEmail.trim().toLowerCase(),
+        phone: newSubAdminPhone.trim(),
+        physicalAddress: newSubAdminAddress.trim() || "Thulamela Civic Centre",
+        username: newSubAdminUsername.trim().toLowerCase(),
+        role: "sub_admin",
+        employeeNumber: newSubAdminEmpNumber.trim() || `EMP-SUB-${Date.now().toString().slice(-4)}`,
+        saIdNumber: newSubAdminIdNumber.trim(),
+        departmentId: newSubAdminDepartmentId,
+        departmentName: deptName,
+        status: "active",
+        profilePicture: newSubAdminProfilePic.trim() || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+        dateCreated: new Date().toISOString()
+      };
+
+      const updatedUsers = [...users, newUserObj];
+      saveUsers(updatedUsers);
+    }
+
+    addAuditLog(currentUser.id, currentUser.name, currentUser.role, "Create Sub-Admin", `Provisioned Sub-Admin ${newSubAdminName} for department ${deptName}`);
+    onAddToast("Sub-Admin Created", `Successfully provisioned Sub-Admin for ${deptName}.`, "success");
+
+    setNewSubAdminName("");
+    setNewSubAdminIdNumber("");
+    setNewSubAdminEmpNumber("");
+    setNewSubAdminEmail("");
+    setNewSubAdminPhone("");
+    setNewSubAdminAddress("");
+    setNewSubAdminDepartmentId("");
+    setNewSubAdminUsername("");
+    setNewSubAdminPassword("");
+    setNewSubAdminConfirmPassword("");
+    setNewSubAdminProfilePic("");
+    loadDashboardData();
   };
 
   // 1. Create Councillor Account (Super Admin only check inside function)
@@ -834,6 +953,17 @@ export default function AdminDashboard({
             >
               <Users size={16} />
               <span>Manage Councillors</span>
+            </button>
+
+            <button
+              id="admin-tab-sub-admins"
+              onClick={() => setActiveTab("sub_admins")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+                activeTab === "sub_admins" ? "bg-gov-blue text-white shadow-md shadow-gov-blue/20" : "hover:bg-slate-800 hover:text-white text-slate-400"
+              }`}
+            >
+              <ShieldCheck size={16} />
+              <span>Manage Sub-Admins</span>
             </button>
 
             <button
@@ -1526,7 +1656,265 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 3: WARD MANAGEMENT MODULE (41 wards details) */}
+        {/* TAB: MANAGE SUB-ADMINS */}
+        {activeTab === "sub_admins" && (
+          <div id="admin-pane-sub-admins" className="space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 sm:p-8 space-y-6">
+              <div className="border-b border-slate-100 pb-4">
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center">
+                  <ShieldCheck className="mr-2 text-gov-blue" size={22} />
+                  <span>Register & Create Department Sub-Admin Account</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">Super/Municipal Administrators only. Assign departmental managers to oversee municipal operational units.</p>
+              </div>
+
+              {currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin" ? (
+                <div className="bg-red-50 border border-red-100 text-red-800 p-4 rounded-xl flex items-center space-x-2 text-xs">
+                  <AlertTriangle size={18} className="text-red-600 flex-shrink-0" />
+                  <span>Your current credentials ({currentUser.role}) do not permit provisioning Sub-Admin accounts.</span>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateSubAdmin} className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Nnditsheni Mudau"
+                        value={newSubAdminName}
+                        onChange={(e) => setNewSubAdminName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-slate-950 text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">South African ID Number *</label>
+                      <input
+                        type="text"
+                        required
+                        maxLength={13}
+                        placeholder="e.g. 8802145896081"
+                        value={newSubAdminIdNumber}
+                        onChange={(e) => setNewSubAdminIdNumber(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Employee Number *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. EMP-SUB-001"
+                        value={newSubAdminEmpNumber}
+                        onChange={(e) => setNewSubAdminEmpNumber(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold font-mono text-base"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Email Address *</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="e.g. subadmin@thulamela.gov.za"
+                        value={newSubAdminEmail}
+                        onChange={(e) => setNewSubAdminEmail(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Phone Number *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 072 555 1234"
+                        value={newSubAdminPhone}
+                        onChange={(e) => setNewSubAdminPhone(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Assigned Department *</label>
+                      <select
+                        required
+                        value={newSubAdminDepartmentId}
+                        onChange={(e) => setNewSubAdminDepartmentId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold text-base text-slate-800"
+                      >
+                        <option value="">-- Select a department --</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Physical Address</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Thohoyandou Civic Centre"
+                        value={newSubAdminAddress}
+                        onChange={(e) => setNewSubAdminAddress(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Profile Picture URL (Optional)</label>
+                      <input
+                        type="url"
+                        placeholder="https://images.unsplash.com/..."
+                        value={newSubAdminProfilePic}
+                        onChange={(e) => setNewSubAdminProfilePic(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-semibold text-base"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">LDAP Username *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. subadmin_water"
+                        value={newSubAdminUsername}
+                        onChange={(e) => setNewSubAdminUsername(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold font-mono text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Password *</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={newSubAdminPassword}
+                        onChange={(e) => setNewSubAdminPassword(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-mono font-bold text-base"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-slate-700 block">Confirm Password *</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={newSubAdminConfirmPassword}
+                        onChange={(e) => setNewSubAdminConfirmPassword(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-mono font-bold text-base"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      className="px-6 py-3 bg-gov-blue hover:bg-blue-800 text-white font-black uppercase tracking-wider rounded-xl shadow-lg shadow-gov-blue/20 transition-all text-xs"
+                    >
+                      Provision Sub-Admin Account
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Sub-Admin Directory Table */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="font-black text-slate-900 uppercase text-xs tracking-wider">Registered Sub-Admin Personnel</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Active municipal department managers across Thulamela.</p>
+                </div>
+
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                  <input
+                    type="text"
+                    placeholder="Search sub-admins..."
+                    value={subAdminSearch}
+                    onChange={(e) => setSubAdminSearch(e.target.value)}
+                    className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-gov-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                      <th className="p-3">Name & ID</th>
+                      <th className="p-3">Department</th>
+                      <th className="p-3">Email & Phone</th>
+                      <th className="p-3">Username</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                    {users.filter(u => u.role === "sub_admin" && (u.name.toLowerCase().includes(subAdminSearch.toLowerCase()) || u.email.toLowerCase().includes(subAdminSearch.toLowerCase()))).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-400 text-xs">
+                          No Sub-Admin accounts registered yet. Use the form above to provision one.
+                        </td>
+                      </tr>
+                    ) : (
+                      users.filter(u => u.role === "sub_admin" && (u.name.toLowerCase().includes(subAdminSearch.toLowerCase()) || u.email.toLowerCase().includes(subAdminSearch.toLowerCase()))).map(u => (
+                        <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{u.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">ID: {u.saIdNumber || "N/A"}</div>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md font-bold text-[10px]">
+                              {u.departmentName || u.departmentId || "Department"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            <div>{u.email}</div>
+                            <div className="text-[10px] text-slate-400">{u.phone || "No phone"}</div>
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">{u.username}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                              u.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                            }`}>
+                              {u.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleToggleUserStatus(u.id, u.status)}
+                              className={`px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all ${
+                                u.status === "active" 
+                                  ? "bg-red-50 hover:bg-red-100 text-red-600 border border-red-100" 
+                                  : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-100"
+                              }`}
+                            >
+                              {u.status === "active" ? "Deactivate" : "Activate"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
         {activeTab === "wards" && (
           <WardManagement 
             wards={wards} 

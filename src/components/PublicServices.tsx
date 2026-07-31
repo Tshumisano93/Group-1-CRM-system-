@@ -396,12 +396,18 @@ export default function PublicServices({ initialServiceId, onClearInitialService
     }
   ];
 
-  // Pre-select service based on initialServiceId prop (deep-linking)
+  // Pre-select service and tab based on props or URL query parameters (deep-linking)
   useEffect(() => {
-    if (initialServiceId) {
-      const matched = services.find(s => s.id === initialServiceId.toLowerCase());
+    const params = new URLSearchParams(window.location.search);
+    const sId = initialServiceId || params.get("service");
+    const t = params.get("tab");
+    if (sId) {
+      const matched = services.find(s => s.id === sId.toLowerCase());
       if (matched) {
         setSelectedService(matched);
+        if (t === "sla") {
+          setActiveTab("sla");
+        }
       }
     }
   }, [initialServiceId]);

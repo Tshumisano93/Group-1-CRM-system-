@@ -164,6 +164,8 @@ app.post("/api/admin/users/create", async (req, res) => {
       wardNumber,
       wardName,
       politicalPosition,
+      departmentId,
+      departmentName,
       profilePicture
     } = req.body;
 
@@ -171,7 +173,11 @@ app.post("/api/admin/users/create", async (req, res) => {
       return res.status(400).json({ error: "Mandatory fields: email, password, name, username, and role are required." });
     }
 
-    const validRoles = ["super_admin", "municipal_admin", "technician", "councillor"];
+    if (role === "sub_admin" && !departmentId) {
+      return res.status(400).json({ error: "A Sub-Admin must be assigned to a specific municipal department." });
+    }
+
+    const validRoles = ["super_admin", "municipal_admin", "technician", "councillor", "sub_admin"];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: `Invalid role specified: "${role}".` });
     }
@@ -215,6 +221,8 @@ app.post("/api/admin/users/create", async (req, res) => {
       wardNumber: wardNumber !== undefined && wardNumber !== null ? Number(wardNumber) : null,
       wardName: wardName || null,
       politicalPosition: politicalPosition || null,
+      departmentId: departmentId || null,
+      departmentName: departmentName || null,
       status: "active",
       profilePicture: (profilePicture || "").trim() || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
       dateCreated: new Date().toISOString()

@@ -121,16 +121,7 @@ export default function PublicFooter({ onNavigate }: PublicFooterProps) {
           <p className="text-xs text-slate-500 leading-relaxed mb-4 italic">
             "To build a sustainable, progressive and model municipality through transparent public service delivery, robust community participation and total municipal infrastructure stewardship."
           </p>
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-            <h5 className="text-[10px] uppercase text-gov-blue font-bold tracking-wider mb-1">Administrative Access</h5>
-            <button
-              id="footer-admin-link"
-              onClick={() => onNavigate("admin-login")}
-              className="text-xs text-slate-600 hover:text-gov-blue hover:underline font-bold transition-all text-left block"
-            >
-              Secure Staff & Departmental Portal
-            </button>
-          </div>
+
         </div>
       </div>
 

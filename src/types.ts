@@ -2,7 +2,7 @@
  * Thulamela Municipality CRM Types
  */
 
-export type UserRole = "super_admin" | "municipal_admin" | "councillor" | "technician";
+export type UserRole = "super_admin" | "municipal_admin" | "councillor" | "technician" | "sub_admin";
 
 export interface User {
   id: string;               // Auto-generated ID (e.g., COUN-101, TECH-201, ADMIN-301)
@@ -17,6 +17,8 @@ export interface User {
   wardNumber?: number;       // For Councillor, 1-41
   wardName?: string;         // For Councillor
   politicalPosition?: string; // For Councillor (e.g., ANC Chief Whip, Councillor, Independent, EFF Ward Rep)
+  departmentId?: string;     // For Sub-Admin (assigned department)
+  departmentName?: string;   // For Sub-Admin
   profilePicture?: string;
   status: "active" | "inactive";
   dateCreated: string;

@@ -52,13 +52,17 @@ service cloud.firestore {
       return isSignedIn() && getUserRole() == 'technician';
     }
 
+    function isSubAdmin() {
+      return isSignedIn() && getUserRole() == 'sub_admin';
+    }
+
     function isValidUser(data) {
       return data.id is string && data.id.size() <= 128
           && data.name is string && data.name.size() <= 128
           && data.email is string && data.email.size() <= 128
           && data.phone is string && data.phone.size() <= 64
           && data.username is string && data.username.size() <= 128
-          && data.role is string && (data.role == 'super_admin' || data.role == 'municipal_admin' || data.role == 'councillor' || data.role == 'technician')
+          && data.role is string && (data.role == 'super_admin' || data.role == 'municipal_admin' || data.role == 'councillor' || data.role == 'technician' || data.role == 'sub_admin')
           && data.status is string && (data.status == 'active' || data.status == 'inactive');
     }
 
