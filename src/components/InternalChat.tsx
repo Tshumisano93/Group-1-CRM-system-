@@ -60,10 +60,15 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
   const loadChatData = () => {
     const loadedRooms = getChatRooms();
     const loadedMessages = getChatMessages();
-    const loadedUsers = getUsers().filter(u => u.id !== currentUser.id && u.status === "active");
+    const allUsers = getUsers();
+    const loadedUsers = allUsers.filter(u => 
+      u.id !== currentUser.id && 
+      u.email?.toLowerCase() !== currentUser.email?.toLowerCase() &&
+      u.status === "active"
+    );
     const complaints = getComplaints();
     
-    // 1. Filter Users (Municipal Directory)
+    // 1. Filter Users (Municipal Directory) - NEVER include current user
     let filteredUsers: User[] = [];
     if (currentUser.role === "councillor") {
       const assignedTechIds = complaints
@@ -91,23 +96,29 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
       filteredUsers = loadedUsers;
     }
 
+    // Explicit additional safety check to exclude current user
+    filteredUsers = filteredUsers.filter(u => 
+      u.id !== currentUser.id && 
+      u.email?.toLowerCase() !== currentUser.email?.toLowerCase()
+    );
+
     // 2. Filter Rooms (Active Channels)
-    const allUsers = getUsers();
     const userMap = new Map(allUsers.map(u => [u.id, u]));
     
     const filteredRoomsList = loadedRooms.filter(r => {
       // Must be a participant
-      if (!r.participants.includes(currentUser.id)) return false;
+      if (!r.participants || !r.participants.includes(currentUser.id)) return false;
       
       // Group/broadcast rooms that they are in are always visible
       if (r.type !== "direct") return true;
       
       // For direct rooms, check other participant's role and rules
       const otherId = r.participants.find(p => p !== currentUser.id);
-      if (!otherId) return false;
+      if (!otherId || otherId === currentUser.id) return false;
       
       const otherUser = userMap.get(otherId);
-      if (!otherUser) return false;
+      if (!otherUser || otherUser.status !== "active") return false;
+      if (otherUser.id === currentUser.id || otherUser.email?.toLowerCase() === currentUser.email?.toLowerCase()) return false;
       
       if (currentUser.role === "councillor") {
         if (otherUser.role === "councillor") return true;
@@ -171,17 +182,16 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
     // Scroll to bottom when active room or messages change
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     
-    // Mark as read when active room changes
-    if (activeRoomId) {
+    // Mark messages in active room as read for current user
+    if (activeRoomId && currentUser?.id) {
       const allMsgs = getChatMessages();
       let updated = false;
       const updatedMsgs = allMsgs.map(m => {
         if (m.roomId === activeRoomId && m.senderId !== currentUser.id) {
           const reads = m.readBy || [];
           if (!reads.includes(currentUser.id)) {
-            reads.push(currentUser.id);
             updated = true;
-            return { ...m, readBy: reads };
+            return { ...m, readBy: [...reads, currentUser.id] };
           }
         }
         return m;
@@ -191,7 +201,7 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
         setMessages(updatedMsgs);
       }
     }
-  }, [activeRoomId, messages.length]);
+  }, [activeRoomId, messages]);
 
   // Handle Simulated Typing Indicator
   useEffect(() => {
@@ -278,10 +288,29 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
     );
   };
 
+  // Helper to format room display name dynamically for direct rooms
+  const getRoomDisplayName = (room: ChatRoom) => {
+    if (room.type === "direct") {
+      const otherId = room.participants.find(p => p !== currentUser.id);
+      if (otherId) {
+        const otherUser = getUsers().find(u => u.id === otherId);
+        if (otherUser) {
+          return `${otherUser.name} (${getRoleLabel(otherUser.role)})`;
+        }
+      }
+    }
+    return room.name;
+  };
+
   // Create Direct Message Room
   const handleStartDM = (targetUser: User) => {
+    if (!targetUser || targetUser.id === currentUser.id || targetUser.email?.toLowerCase() === currentUser.email?.toLowerCase()) {
+      onAddToast("Invalid Action", "You cannot start a direct chat session with yourself.", "warning");
+      return;
+    }
+
     const allRooms = getChatRooms();
-    const roomName = `${targetUser.name} (${targetUser.role.replace("_", " ")})`;
+    const roomName = `${targetUser.name} (${getRoleLabel(targetUser.role)})`;
     
     // Check if DM room already exists between these two
     const existing = allRooms.find(r => 
@@ -439,12 +468,22 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
   };
 
   const filteredRooms = rooms.filter(r => {
-    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const displayName = getRoomDisplayName(r);
+    const matchesSearch = displayName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (r.lastMessage || "").toLowerCase().includes(searchQuery.toLowerCase());
     
     // Do not show archived rooms in the main sidebar unless there are no normal ones
     const isArchived = (r.archivedBy || []).includes(currentUser.id);
     return matchesSearch && !isArchived;
+  });
+
+  const searchedUsers = users.filter(u => {
+    if (u.id === currentUser.id || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return u.name.toLowerCase().includes(q) || 
+           getRoleLabel(u.role).toLowerCase().includes(q) ||
+           (u.email || "").toLowerCase().includes(q);
   });
 
   const getRoleLabel = (role: UserRole) => {
@@ -499,7 +538,8 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
             filteredRooms.map((r) => {
               const isPinned = (r.pinnedBy || []).includes(currentUser.id);
               const isActive = r.id === activeRoomId;
-              const unreadCount = messages.filter(m => m.roomId === r.id && !m.readBy?.includes(currentUser.id)).length;
+              const unreadCount = messages.filter(m => m.roomId === r.id && m.senderId !== currentUser.id && (!m.readBy || !m.readBy.includes(currentUser.id))).length;
+              const displayName = getRoomDisplayName(r);
 
               return (
                 <div
@@ -518,7 +558,7 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
                     <div className="min-w-0">
                       <div className="flex items-center space-x-1">
                         <h4 className={`text-xs font-black truncate max-w-[130px] ${isActive ? "text-white" : "text-slate-800"}`}>
-                          {r.name}
+                          {displayName}
                         </h4>
                         {isPinned && <Pin size={10} className="text-gov-yellow fill-gov-yellow flex-shrink-0" />}
                       </div>
@@ -535,7 +575,7 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
                       </span>
                     )}
                     {unreadCount > 0 && (
-                      <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full">
+                      <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full flex items-center justify-center min-w-[18px]">
                         {unreadCount}
                       </span>
                     )}
@@ -547,27 +587,40 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
 
           {/* Direct message directory list */}
           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 pt-4 pb-1.5 block">
-            MUNICIPAL DIRECTORY ({users.length})
+            MUNICIPAL DIRECTORY ({searchedUsers.length})
           </span>
           <div className="grid grid-cols-1 gap-1 px-1">
-            {users.map((u) => (
-              <div
-                key={u.id}
-                onClick={() => handleStartDM(u)}
-                className="flex items-center justify-between p-2 rounded-lg bg-white/40 border border-slate-100 hover:bg-slate-100 cursor-pointer transition-all"
-              >
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center font-bold text-[10px] text-slate-700">
-                    {u.name.substring(0, 2).toUpperCase()}
+            {searchedUsers.map((u) => {
+              const unreadFromUser = messages.filter(
+                m => m.senderId === u.id && (!m.readBy || !m.readBy.includes(currentUser.id))
+              ).length;
+
+              return (
+                <div
+                  key={u.id}
+                  onClick={() => handleStartDM(u)}
+                  className="flex items-center justify-between p-2 rounded-lg bg-white/40 border border-slate-100 hover:bg-slate-100 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center font-bold text-[10px] text-slate-700 flex-shrink-0">
+                      {u.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h5 className="text-[11px] font-black text-slate-800 leading-tight truncate">{u.name}</h5>
+                      <span className="text-[9px] text-gov-blue font-bold tracking-tight block">{getRoleLabel(u.role)}</span>
+                    </div>
                   </div>
-                  <div>
-                    <h5 className="text-[11px] font-black text-slate-800 leading-tight">{u.name}</h5>
-                    <span className="text-[9px] text-gov-blue font-bold tracking-tight">{getRoleLabel(u.role)}</span>
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    {unreadFromUser > 0 && (
+                      <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full min-w-[16px] text-center">
+                        {unreadFromUser}
+                      </span>
+                    )}
+                    <ChevronRight size={12} className="text-slate-400" />
                   </div>
                 </div>
-                <ChevronRight size={12} className="text-slate-400" />
-              </div>
-            ))}
+              );
+            })}
           </div>
 
         </div>
@@ -585,11 +638,14 @@ export default function InternalChat({ currentUser, onAddToast, initialActiveRoo
                     {getRoomIcon(activeRoom.type)}
                   </span>
                   <h3 className="font-black text-sm text-slate-900 leading-tight">
-                    {activeRoom.name}
+                    {getRoomDisplayName(activeRoom)}
                   </h3>
                 </div>
                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                  Participants: {activeRoom.participants.join(", ")}
+                  Participants: {activeRoom.participants.map(id => {
+                    const u = getUsers().find(usr => usr.id === id);
+                    return u ? u.name : id;
+                  }).join(", ")}
                 </p>
               </div>
 

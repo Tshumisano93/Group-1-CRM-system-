@@ -769,6 +769,22 @@ export function saveNotifications(notifications: Notification[]) {
   }
 }
 
+export async function saveSingleNotification(n: Notification): Promise<void> {
+  const current = getNotifications();
+  const updated = [n, ...current.filter(existing => existing.id !== n.id)];
+  localStorage.setItem("thulamela_crm_notifications", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "notifications", n.id), n);
+    } catch (err: any) {
+      console.error("Firestore error saving notification:", err);
+      handleFirestoreError(err, OperationType.WRITE, `notifications/${n.id}`);
+    }
+  }
+}
+
 export async function deleteNotification(notificationId: string): Promise<void> {
   const notifications = getNotifications();
   const filtered = notifications.filter(n => n.id !== notificationId);
@@ -941,6 +957,46 @@ export function saveChatMessages(messages: ChatMessage[]) {
   }
 }
 
+// Calculate total unread messages for a specific user
+export function getUnreadChatCount(userId: string): number {
+  if (!userId) return 0;
+  const rooms = getChatRooms();
+  const messages = getChatMessages();
+  
+  const myRoomIds = new Set(
+    rooms
+      .filter(r => r.participants && r.participants.includes(userId))
+      .map(r => r.id)
+  );
+  
+  return messages.filter(m => 
+    myRoomIds.has(m.roomId) && 
+    m.senderId !== userId && 
+    (!m.readBy || !m.readBy.includes(userId))
+  ).length;
+}
+
+// Mark messages in a specific room as read for a specific user
+export function markRoomMessagesAsRead(roomId: string, userId: string): boolean {
+  if (!roomId || !userId) return false;
+  const allMsgs = getChatMessages();
+  let updated = false;
+  const updatedMsgs = allMsgs.map(m => {
+    if (m.roomId === roomId && m.senderId !== userId) {
+      const reads = m.readBy || [];
+      if (!reads.includes(userId)) {
+        updated = true;
+        return { ...m, readBy: [...reads, userId] };
+      }
+    }
+    return m;
+  });
+  if (updated) {
+    saveChatMessages(updatedMsgs);
+  }
+  return updated;
+}
+
 // Get and save Calendar Events
 export function getCalendarEvents(): CalendarEvent[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_calendar_events") || "[]");
@@ -957,6 +1013,45 @@ export function saveCalendarEvents(events: CalendarEvent[]) {
         console.warn("Firestore sync calendarEvents skipped/failed (expected if unauthorized or offline):", err);
       }
     });
+  }
+}
+
+export async function saveSingleCalendarEvent(event: CalendarEvent): Promise<void> {
+  const current = getCalendarEvents();
+  const idx = current.findIndex(e => e.id === event.id);
+  let updated: CalendarEvent[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = event;
+  } else {
+    updated = [event, ...current];
+  }
+  localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "calendarEvents", event.id), event);
+    } catch (err: any) {
+      console.error("Firestore error saving calendar event:", err);
+      handleFirestoreError(err, OperationType.WRITE, `calendarEvents/${event.id}`);
+    }
+  }
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  const current = getCalendarEvents();
+  const filtered = current.filter(e => e.id !== id);
+  localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
+
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "calendarEvents", id));
+    } catch (err: any) {
+      console.error("Firestore error deleting calendar event:", err);
+      handleFirestoreError(err, OperationType.DELETE, `calendarEvents/${id}`);
+    }
   }
 }
 

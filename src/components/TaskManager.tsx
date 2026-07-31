@@ -44,7 +44,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
   const [taskDesc, setTaskDesc] = useState("");
   const [taskAssignedId, setTaskAssignedId] = useState("");
   const [taskDeptId, setTaskDeptId] = useState("WATER");
-  const [taskPriority, setTaskPriority] = useState<Task["priority"]>("Medium");
+  const [taskPriority, setTaskPriority] = useState<Task["priority"] | "">("");
   const [taskDueDate, setTaskDueDate] = useState("2026-07-15");
 
   // Active expanded details task (for editing progress/comments)
@@ -76,8 +76,8 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
   // Handle task registration
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!taskTitle.trim() || !taskAssignedId) {
-      onAddToast("Information Needed", "Please provide a task title and select an assigned staff member.", "warning");
+    if (!taskTitle.trim() || !taskAssignedId || !taskPriority) {
+      onAddToast("Information Needed", "Please provide a task title, select assigned staff, and select priority.", "warning");
       return;
     }
 
@@ -122,6 +122,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
     setTaskTitle("");
     setTaskDesc("");
     setTaskAssignedId("");
+    setTaskPriority("");
     setTaskDueDate("2026-07-15");
     setShowForm(false);
   };
@@ -273,7 +274,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
               className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
               required
             >
-              <option value="">-- Choose Staff Allocation --</option>
+              <option value="">Select technician</option>
               {technicians.map(t => (
                 <option key={t.id} value={t.id}>{t.name} - ({t.departmentName})</option>
               ))}
@@ -296,10 +297,12 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
           <div className="space-y-1.5">
             <label className="font-bold text-slate-700 block">Task Priority Level *</label>
             <select
+              required
               value={taskPriority}
               onChange={(e) => setTaskPriority(e.target.value as Task["priority"])}
               className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:outline-none text-base"
             >
+              <option value="">Select priority</option>
               <option value="Low">Low Priority</option>
               <option value="Medium">Medium Priority</option>
               <option value="High">High Priority</option>

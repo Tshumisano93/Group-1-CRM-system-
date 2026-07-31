@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ServiceDeliveryReports from "./ServiceDeliveryReports";
 import { 
   getComplaints, 
   saveComplaints, 
@@ -16,7 +17,8 @@ import {
   saveNotifications,
   deleteNotification,
   getSyncStatus,
-  deleteComplaint
+  deleteComplaint,
+  getUnreadChatCount
 } from "../db";
 import { User, Complaint, Ward, Department, Technician, AuditLog, ComplaintStatus, ComplaintPriority, AccountRequest, Notification } from "../types";
 import { collection, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
@@ -60,7 +62,7 @@ import {
 import InternalChat from "./InternalChat";
 import MunicipalCalendar from "./MunicipalCalendar";
 import TaskManager from "./TaskManager";
-import InteractiveGIS from "./InteractiveGIS";
+import SharedGISMap from "./SharedGISMap";
 import ExecutiveDashboardView from "./ExecutiveDashboardView";
 import DocumentManager from "./DocumentManager";
 import DigitalForms from "./DigitalForms";
@@ -74,7 +76,7 @@ interface AdminDashboardProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
-type AdminTab = "dashboard" | "councillors" | "sub_admins" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices" | "notifications";
+type AdminTab = "dashboard" | "councillors" | "sub_admins" | "wards" | "departments" | "technicians" | "complaints" | "logs" | "profile" | "settings" | "chat" | "calendar" | "tasks" | "gis" | "executive_dashboard" | "documents" | "digital_forms" | "account_requests" | "service_notices" | "notifications" | "reports";
 
 export default function AdminDashboard({
   currentUser,
@@ -100,8 +102,8 @@ export default function AdminDashboard({
   const [newCllrEmail, setNewCllrEmail] = useState("");
   const [newCllrPhone, setNewCllrPhone] = useState("");
   const [newCllrAddress, setNewCllrAddress] = useState("");
-  const [newCllrWard, setNewCllrWard] = useState<number>(3); // default a vacant ward
-  const [newCllrPolitical, setNewCllrPolitical] = useState("ANC Ward Councillor");
+  const [newCllrWard, setNewCllrWard] = useState<number | "">("");
+  const [newCllrPolitical, setNewCllrPolitical] = useState("");
   const [newCllrUsername, setNewCllrUsername] = useState("");
   const [newCllrPassword, setNewCllrPassword] = useState("");
   const [newCllrConfirmPassword, setNewCllrConfirmPassword] = useState("");
@@ -430,8 +432,8 @@ export default function AdminDashboard({
       return;
     }
 
-    if (!newCllrName.trim() || !newCllrIdNumber.trim() || !newCllrEmail.trim() || !newCllrUsername.trim() || !newCllrPassword.trim()) {
-      onAddToast("Validation Error", "Please fill in all mandatory fields.", "warning");
+    if (!newCllrName.trim() || !newCllrIdNumber.trim() || !newCllrEmail.trim() || !newCllrUsername.trim() || !newCllrPassword.trim() || !newCllrWard || !newCllrPolitical) {
+      onAddToast("Validation Error", "Please fill in all mandatory fields, including selecting a ward and political party.", "warning");
       return;
     }
 
@@ -548,6 +550,8 @@ export default function AdminDashboard({
     setNewCllrEmail("");
     setNewCllrPhone("");
     setNewCllrAddress("");
+    setNewCllrWard("");
+    setNewCllrPolitical("");
     setNewCllrUsername("");
     setNewCllrPassword("");
     setNewCllrConfirmPassword("");
@@ -1022,12 +1026,19 @@ export default function AdminDashboard({
             <button
               id="admin-tab-chat"
               onClick={() => setActiveTab("chat")}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
                 activeTab === "chat" ? "bg-gov-blue text-white shadow-md shadow-gov-blue/20" : "hover:bg-slate-800 hover:text-white text-slate-400"
               }`}
             >
-              <MessageSquare size={16} />
-              <span>Internal Chat</span>
+              <div className="flex items-center space-x-3">
+                <MessageSquare size={16} />
+                <span>Internal Chat</span>
+              </div>
+              {getUnreadChatCount(currentUser.id) > 0 && (
+                <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {getUnreadChatCount(currentUser.id)}
+                </span>
+              )}
             </button>
 
             <button
@@ -1072,6 +1083,17 @@ export default function AdminDashboard({
             >
               <BarChart2 size={16} />
               <span>Executive KPIs</span>
+            </button>
+
+            <button
+              id="admin-tab-reports"
+              onClick={() => setActiveTab("reports")}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+                activeTab === "reports" ? "bg-gov-blue text-white shadow-md shadow-gov-blue/20" : "hover:bg-slate-800 hover:text-white text-slate-400"
+              }`}
+            >
+              <FileText size={16} />
+              <span>Service Reports</span>
             </button>
 
             <button
@@ -1484,10 +1506,12 @@ export default function AdminDashboard({
                     <div className="space-y-1.5">
                       <label className="font-bold text-slate-700 block">Assigned Ward (1-41) *</label>
                       <select
+                        required
                         value={newCllrWard}
-                        onChange={(e) => setNewCllrWard(Number(e.target.value))}
+                        onChange={(e) => setNewCllrWard(e.target.value === "" ? "" : Number(e.target.value))}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold text-base"
                       >
+                        <option value="">Select ward</option>
                         {wards.map(w => (
                           <option key={w.wardNumber} value={w.wardNumber}>
                             Ward {w.wardNumber} ({w.wardName}) {w.assignedCouncillorId ? "• Occupied" : "• VACANT"}
@@ -1501,10 +1525,12 @@ export default function AdminDashboard({
                     <div className="space-y-1.5">
                       <label className="font-bold text-slate-700 block">Political Position / Party *</label>
                       <select
+                        required
                         value={newCllrPolitical}
                         onChange={(e) => setNewCllrPolitical(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold text-base"
                       >
+                        <option value="">Select political party</option>
                         <option value="ANC Ward Councillor">African National Congress (ANC) Ward Councillor</option>
                         <option value="EFF Ward Representative">Economic Freedom Fighters (EFF) Ward Representative</option>
                         <option value="DA Ward Representative">Democratic Alliance (DA) Ward Representative</option>
@@ -1747,7 +1773,7 @@ export default function AdminDashboard({
                         onChange={(e) => setNewSubAdminDepartmentId(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-blue font-bold text-base text-slate-800"
                       >
-                        <option value="">-- Select a department --</option>
+                        <option value="">Select department</option>
                         {departments.map(d => (
                           <option key={d.id} value={d.id}>
                             {d.name} ({d.code})
@@ -2172,11 +2198,15 @@ export default function AdminDashboard({
         )}
 
         {activeTab === "gis" && (
-          <InteractiveGIS currentUser={currentUser} onAddToast={onAddToast} />
+          <SharedGISMap currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
         {activeTab === "executive_dashboard" && (
           <ExecutiveDashboardView currentUser={currentUser} onAddToast={onAddToast} />
+        )}
+
+        {activeTab === "reports" && (
+          <ServiceDeliveryReports currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
         {activeTab === "documents" && (
@@ -2342,7 +2372,7 @@ export default function AdminDashboard({
                   }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-base"
                 >
-                  <option value="">Awaiting Allocation</option>
+                  <option value="">Select department</option>
                   {departments.map(dept => (
                     <option key={dept.id} value={dept.id}>{dept.name}</option>
                   ))}

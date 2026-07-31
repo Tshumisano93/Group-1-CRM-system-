@@ -12,7 +12,8 @@ import {
   addNotification,
   getSyncStatus,
   getChatRooms,
-  saveChatRooms
+  saveChatRooms,
+  getUnreadChatCount
 } from "../db";
 import { User, Complaint, Notification, Department, Ward, ComplaintStatus, ComplaintPriority, ChatRoom } from "../types";
 import { 
@@ -48,7 +49,7 @@ import {
 
 import InternalChat from "./InternalChat";
 import MunicipalCalendar from "./MunicipalCalendar";
-import InteractiveGIS from "./InteractiveGIS";
+import SharedGISMap from "./SharedGISMap";
 import DocumentManager from "./DocumentManager";
 import DigitalForms from "./DigitalForms";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -84,8 +85,8 @@ export default function CouncillorDashboard({
   // Form State for Lodging Complaint
   const [compTitle, setCompTitle] = useState("");
   const [compDesc, setCompDesc] = useState("");
-  const [compCategory, setCompCategory] = useState("Water Services");
-  const [compSubCategory, setCompSubCategory] = useState("Pipe Burst");
+  const [compCategory, setCompCategory] = useState("");
+  const [compSubCategory, setCompSubCategory] = useState("");
   const [compPriority, setCompPriority] = useState<ComplaintPriority>("Medium");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -219,8 +220,8 @@ export default function CouncillorDashboard({
 
   const handleLodgeComplaint = async (e: React.FormEvent, isDraftFlag: boolean = false) => {
     e.preventDefault();
-    if (!compTitle.trim() || !compDesc.trim()) {
-      onAddToast("Validation Alert", "Please fill in the complaint title and description.", "warning");
+    if (!compTitle.trim() || !compDesc.trim() || !compCategory) {
+      onAddToast("Validation Alert", "Please fill in the complaint title, description, and select a category.", "warning");
       return;
     }
 
@@ -338,8 +339,8 @@ export default function CouncillorDashboard({
       // Reset
       setCompTitle("");
       setCompDesc("");
-      setCompCategory("Water Services");
-      setCompSubCategory("Pipe Burst");
+      setCompCategory("");
+      setCompSubCategory("");
       setCompPriority("Medium");
       setStreetAddress("");
       setVillage("");
@@ -740,14 +741,21 @@ export default function CouncillorDashboard({
             <button
               id="tab-chat"
               onClick={() => setActiveTab("chat")}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
                 activeTab === "chat"
                   ? "bg-gov-green text-white shadow-md shadow-gov-green/20"
                   : "hover:bg-slate-800 hover:text-white text-slate-400"
               }`}
             >
-              <MessageSquare size={16} />
-              <span>Internal Chat</span>
+              <div className="flex items-center space-x-3">
+                <MessageSquare size={16} />
+                <span>Internal Chat</span>
+              </div>
+              {getUnreadChatCount(currentUser.id) > 0 && (
+                <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {getUnreadChatCount(currentUser.id)}
+                </span>
+              )}
             </button>
 
             <button
@@ -1067,6 +1075,7 @@ export default function CouncillorDashboard({
                   <div className="space-y-1.5">
                     <label className="font-bold text-slate-700 block">Complaint Category *</label>
                     <select
+                      required
                       value={compCategory}
                       onChange={(e) => {
                         const cat = e.target.value;
@@ -1076,10 +1085,12 @@ export default function CouncillorDashboard({
                         else if (cat === "Electricity & Energy") setCompSubCategory("Power Outage");
                         else if (cat === "Roads and Stormwater") setCompSubCategory("Potholes");
                         else if (cat === "Solid Waste") setCompSubCategory("Illegal Dumping");
-                        else setCompSubCategory("General Failure");
+                        else if (cat) setCompSubCategory("General Failure");
+                        else setCompSubCategory("");
                       }}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-base"
                     >
+                      <option value="">Select category</option>
                       <option value="Water Services">Water Services</option>
                       <option value="Electricity & Energy">Electricity & Energy</option>
                       <option value="Roads and Stormwater">Roads and Stormwater</option>
@@ -2041,7 +2052,7 @@ export default function CouncillorDashboard({
         )}
 
         {activeTab === "gis" && (
-          <InteractiveGIS currentUser={currentUser} onAddToast={onAddToast} />
+          <SharedGISMap currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
         {activeTab === "documents" && (

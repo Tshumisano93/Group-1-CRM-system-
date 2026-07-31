@@ -48,10 +48,10 @@ const PREFERRED_CONTACT_METHODS: Array<"SMS" | "Email" | "Call" | "WhatsApp"> = 
 
 export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicComplaintFormProps) {
   const [formData, setFormData] = useState({
-    category: "Water Services",
+    category: "",
     title: "",
     description: "",
-    wardNumber: "1",
+    wardNumber: "",
     citizenName: "",
     citizenContactNumber: "",
     preferredContactMethod: "Call" as "SMS" | "Email" | "Call" | "WhatsApp"
@@ -80,8 +80,8 @@ export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicCo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title.trim() || !formData.description.trim() || !formData.citizenName.trim() || !formData.citizenContactNumber.trim()) {
-      onAddToast("Validation Error", "Please fill in all mandatory fields marked with *.", "warning");
+    if (!formData.title.trim() || !formData.description.trim() || !formData.citizenName.trim() || !formData.citizenContactNumber.trim() || !formData.category || !formData.wardNumber) {
+      onAddToast("Validation Error", "Please fill in all mandatory fields, including category and ward number.", "warning");
       return;
     }
 
@@ -170,10 +170,10 @@ export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicCo
   const handleResetForm = () => {
     setSubmittedId(null);
     setFormData({
-      category: "Water Services",
+      category: "",
       title: "",
       description: "",
-      wardNumber: "1",
+      wardNumber: "",
       citizenName: "",
       citizenContactNumber: "",
       preferredContactMethod: "Call"
@@ -333,10 +333,12 @@ export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicCo
                 <div className="space-y-1.5">
                   <label className="font-bold text-slate-700 block">Service Category *</label>
                   <select
+                    required
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-base"
                   >
+                    <option value="">Select category</option>
                     {CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
@@ -348,10 +350,12 @@ export default function PublicComplaintForm({ onAddToast, onNavigate }: PublicCo
                 <div className="space-y-1.5">
                   <label className="font-bold text-slate-700 block">Ward Number (1-41) *</label>
                   <select
+                    required
                     value={formData.wardNumber}
                     onChange={(e) => setFormData({ ...formData, wardNumber: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 focus:outline-none focus:border-gov-green focus:bg-white transition-all font-bold text-base"
                   >
+                    <option value="">Select ward</option>
                     {SEED_WARDS.map((w) => (
                       <option key={w.wardNumber} value={w.wardNumber}>
                         Ward {w.wardNumber} — {w.wardName}

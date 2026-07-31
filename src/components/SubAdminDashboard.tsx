@@ -9,11 +9,14 @@ import {
   getNotifications,
   deleteNotification,
   getDepartments,
-  getSyncStatus
+  getSyncStatus,
+  getUnreadChatCount
 } from "../db";
 import { User, Complaint, Technician, ComplaintStatus, ComplaintPriority, Notification, Department, UserRole } from "../types";
 import InternalChat from "./InternalChat";
 import MunicipalCalendar from "./MunicipalCalendar";
+import SharedGISMap from "./SharedGISMap";
+import ServiceDeliveryReports from "./ServiceDeliveryReports";
 import { 
   LayoutDashboard, 
   Wrench, 
@@ -48,7 +51,7 @@ interface SubAdminDashboardProps {
   onAddToast: (title: string, message: string, type: "success" | "info" | "warning" | "error") => void;
 }
 
-type SubAdminTab = "overview" | "complaints" | "technicians" | "scheduler" | "sla" | "chat" | "notifications" | "profile" | "settings";
+type SubAdminTab = "overview" | "complaints" | "technicians" | "scheduler" | "calendar" | "sla" | "chat" | "notifications" | "profile" | "settings" | "gis" | "reports";
 
 export default function SubAdminDashboard({
   currentUser,
@@ -228,7 +231,9 @@ export default function SubAdminDashboard({
             { id: "technicians", label: `Technicians (${technicians.length})`, icon: Wrench },
             { id: "scheduler", label: "Department Scheduler", icon: Calendar },
             { id: "sla", label: "SLA Monitoring", icon: Clock },
-            { id: "chat", label: "Internal Chat", icon: MessageSquare },
+            { id: "gis", label: "GIS Operations", icon: MapPin },
+            { id: "reports", label: "Service Reports", icon: FileText },
+            { id: "chat", label: "Internal Chat", icon: MessageSquare, badge: getUnreadChatCount(currentUser.id) },
             { id: "notifications", label: `Notifications (${notifications.length})`, icon: Bell },
             { id: "profile", label: "My Profile", icon: UserIcon }
           ].map((tab) => {
@@ -236,6 +241,7 @@ export default function SubAdminDashboard({
             const isActive = activeTab === tab.id;
             return (
               <button
+                type="button"
                 key={tab.id}
                 id={`sub-admin-tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id as SubAdminTab)}
@@ -247,6 +253,11 @@ export default function SubAdminDashboard({
               >
                 <Icon className={`w-4 h-4 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
                 <span>{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full min-w-[16px] text-center ml-1">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -535,7 +546,7 @@ export default function SubAdminDashboard({
           </div>
         )}
 
-        {activeTab === "scheduler" && (
+        {(activeTab === "scheduler" || activeTab === "calendar") && (
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900">Department Operational Scheduler</h2>
@@ -545,6 +556,10 @@ export default function SubAdminDashboard({
               <MunicipalCalendar currentUser={currentUser} onAddToast={onAddToast} />
             </div>
           </div>
+        )}
+
+        {activeTab === "reports" && (
+          <ServiceDeliveryReports currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
         {activeTab === "sla" && (
@@ -632,6 +647,10 @@ export default function SubAdminDashboard({
               )}
             </div>
           </div>
+        )}
+
+        {activeTab === "gis" && (
+          <SharedGISMap currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
         {activeTab === "profile" && (

@@ -13,9 +13,9 @@ export default function ServiceNoticeManagement() {
 
   // Form states
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<ServiceNotice["category"]>("Water");
-  const [status, setStatus] = useState<ServiceNotice["status"]>("Operational");
-  const [priority, setPriority] = useState<ServiceNotice["priority"]>("Medium");
+  const [category, setCategory] = useState<ServiceNotice["category"] | "">("");
+  const [status, setStatus] = useState<ServiceNotice["status"] | "">("");
+  const [priority, setPriority] = useState<ServiceNotice["priority"] | "">("");
   const [department, setDepartment] = useState("");
   const [departmentManager, setDepartmentManager] = useState("T. Nekhavhambe");
   const [emergencyNumber, setEmergencyNumber] = useState("015 962 7500");
@@ -37,9 +37,9 @@ export default function ServiceNoticeManagement() {
 
   const resetForm = () => {
     setTitle("");
-    setCategory("Water");
-    setStatus("Operational");
-    setPriority("Medium");
+    setCategory("");
+    setStatus("");
+    setPriority("");
     setDepartment("");
     setDepartmentManager("T. Nekhavhambe");
     setEmergencyNumber("015 962 7500");
@@ -88,6 +88,10 @@ export default function ServiceNoticeManagement() {
 
     if (!title.trim()) {
       setFormError("Notice Title is required.");
+      return;
+    }
+    if (!category || !status || !priority) {
+      setFormError("Please select Category, Operational Status, and Priority Level.");
       return;
     }
     if (!description.trim()) {
@@ -310,10 +314,12 @@ export default function ServiceNoticeManagement() {
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Category *</label>
                   <select
+                    required
                     value={category}
                     onChange={(e) => setCategory(e.target.value as any)}
                     className="w-full border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium"
                   >
+                    <option value="">Select category</option>
                     <option value="Water">Water Services</option>
                     <option value="Electricity">Electricity & Energy</option>
                     <option value="Roads">Roads & Transport</option>
@@ -330,10 +336,12 @@ export default function ServiceNoticeManagement() {
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Operational Status *</label>
                   <select
+                    required
                     value={status}
                     onChange={(e) => setStatus(e.target.value as any)}
                     className="w-full border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium"
                   >
+                    <option value="">Select status</option>
                     <option value="Operational">Operational</option>
                     <option value="Maintenance">Maintenance</option>
                     <option value="Emergency">Emergency Shutdown</option>
@@ -347,10 +355,12 @@ export default function ServiceNoticeManagement() {
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Priority Level *</label>
                   <select
+                    required
                     value={priority}
                     onChange={(e) => setPriority(e.target.value as any)}
                     className="w-full border border-slate-300 rounded-xl p-2.5 text-slate-900 font-medium"
                   >
+                    <option value="">Select priority</option>
                     <option value="Low">Low Priority</option>
                     <option value="Medium">Medium Priority</option>
                     <option value="High">High Priority</option>

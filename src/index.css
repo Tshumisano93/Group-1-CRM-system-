@@ -3,10 +3,33 @@
 @theme {
   --color-gov-green: #2E7D32;
   --color-gov-green-hover: #1B5E20;
+  --color-gov-green-light: #E8F5E9;
   --color-gov-blue: #1565C0;
   --color-gov-blue-hover: #0D47A1;
+  --color-gov-blue-light: #E3F2FD;
   --color-gov-yellow: #FFD600;
   --color-gov-yellow-hover: #FFC400;
+  --color-gov-yellow-light: #FFFDE7;
+
+  --color-crm-bg: #F8F9FA;
+  --color-crm-surface: #FFFFFF;
+  --color-crm-surface-muted: #F1F5F9;
+  --color-crm-dark: #0F172A;
+  --color-crm-dark-surface: #1E293B;
+
+  --color-crm-text: #0F172A;
+  --color-crm-text-secondary: #334155;
+  --color-crm-text-muted: #64748B;
+  --color-crm-text-subtle: #94A3B8;
+
+  --color-crm-border: #E2E8F0;
+  --color-crm-border-strong: #CBD5E1;
+
+  --color-crm-success: #16A34A;
+  --color-crm-warning: #D97706;
+  --color-crm-error: #DC2626;
+  --color-crm-info: #2563EB;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --animate-slide-in: slideIn 0.3s ease-out;
@@ -35,6 +58,7 @@
 
 @layer base {
   body {
-    @apply bg-[#F8F9FA] text-slate-900 font-sans antialiased selection:bg-gov-green/10 selection:text-gov-green;
+    @apply bg-[var(--color-crm-bg)] text-[var(--color-crm-text)] font-sans antialiased selection:bg-gov-green/10 selection:text-gov-green;
   }
 }
+

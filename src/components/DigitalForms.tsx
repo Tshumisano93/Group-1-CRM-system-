@@ -35,7 +35,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
   const [siteLocation, setSiteLocation] = useState("");
   const [materialsUsed, setMaterialsUsed] = useState("");
   const [laborHours, setLaborHours] = useState("");
-  const [leakSeverity, setLeakSeverity] = useState("Medium");
+  const [leakSeverity, setLeakSeverity] = useState("");
 
   // Completion Fields
   const [completionDate, setCompletionDate] = useState("2026-07-10");
@@ -149,6 +149,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
     setSiteLocation("");
     setMaterialsUsed("");
     setLaborHours("");
+    setLeakSeverity("");
     setTechnicianNotes("");
     setElectronicSignature("");
     setCapturedGps("");
@@ -249,6 +250,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
                     onChange={(e) => setLeakSeverity(e.target.value)}
                     className="w-full bg-white border border-slate-200 rounded-lg p-2 focus:outline-none font-semibold text-slate-700 text-base"
                   >
+                    <option value="">Select severity</option>
                     <option value="Low">Low (Minor Weeping)</option>
                     <option value="Medium">Medium (Active Drip)</option>
                     <option value="Severe">Severe (Major Burst Flow)</option>

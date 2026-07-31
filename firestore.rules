@@ -133,7 +133,17 @@ service cloud.firestore {
           && data.type is string
           && data.startDate is string
           && data.endDate is string
-          && data.location is string && data.location.size() <= 500;
+          && data.location is string && data.location.size() <= 500
+          && (!('departmentId' in data) || data.departmentId == null || (data.departmentId is string && data.departmentId.size() <= 128))
+          && (!('departmentName' in data) || data.departmentName == null || (data.departmentName is string && data.departmentName.size() <= 128))
+          && (!('status' in data) || data.status == null || (data.status is string && (data.status == 'Scheduled' || data.status == 'In Progress' || data.status == 'Completed' || data.status == 'Cancelled')))
+          && (!('assignedUserId' in data) || data.assignedUserId == null || (data.assignedUserId is string && data.assignedUserId.size() <= 128))
+          && (!('assignedUserName' in data) || data.assignedUserName == null || (data.assignedUserName is string && data.assignedUserName.size() <= 128))
+          && (!('wardNumber' in data) || data.wardNumber == null || data.wardNumber is int)
+          && (!('complaintId' in data) || data.complaintId == null || (data.complaintId is string && data.complaintId.size() <= 128))
+          && (!('createdById' in data) || data.createdById == null || (data.createdById is string && data.createdById.size() <= 128))
+          && (!('createdByName' in data) || data.createdByName == null || (data.createdByName is string && data.createdByName.size() <= 128))
+          && (!('dateCreated' in data) || data.dateCreated == null || (data.dateCreated is string && data.dateCreated.size() <= 128));
     }
 
     function isValidTask(data) {
@@ -341,10 +351,28 @@ service cloud.firestore {
     }
 
     match /calendarEvents/{eventId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming());
-      allow update: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming()) && (isAdmin() || isCouncillor() || isTechnician());
-      allow delete: if isAdmin();
+      allow get: if isSignedIn() && (
+        isAdmin() ||
+        (isSubAdmin() && (!('departmentId' in resource.data) || resource.data.departmentId == getUserData().departmentId)) ||
+        (isTechnician() && (resource.data.assignedUserId == request.auth.uid || (!('departmentId' in resource.data) || resource.data.departmentId == getUserData().departmentId))) ||
+        (isCouncillor() && (!('wardNumber' in resource.data) || resource.data.wardNumber == getUserData().wardNumber || resource.data.createdById == request.auth.uid))
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        (isSubAdmin() && (!('departmentId' in resource.data) || resource.data.departmentId == getUserData().departmentId)) ||
+        (isTechnician() && (resource.data.assignedUserId == request.auth.uid || (!('departmentId' in resource.data) || resource.data.departmentId == getUserData().departmentId))) ||
+        (isCouncillor() && (!('wardNumber' in resource.data) || resource.data.wardNumber == getUserData().wardNumber || resource.data.createdById == request.auth.uid))
+      );
+      allow create: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming()) && (
+        isAdmin() ||
+        (isSubAdmin() && incoming().departmentId == getUserData().departmentId)
+      );
+      allow update: if isSignedIn() && isValidId(eventId) && isValidCalendarEvent(incoming()) && (
+        isAdmin() ||
+        (isSubAdmin() && existing().departmentId == getUserData().departmentId && incoming().departmentId == getUserData().departmentId) ||
+        (isTechnician() && existing().assignedUserId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'description', 'endDate']))
+      );
+      allow delete: if isAdmin() || (isSubAdmin() && existing().departmentId == getUserData().departmentId);
     }
 
     match /tasks/{taskId} {

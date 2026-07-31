@@ -225,9 +225,16 @@ export interface CalendarEvent {
   startDate: string;
   endDate: string;
   location: string;
+  departmentId?: string;
+  departmentName?: string;
+  status?: "Scheduled" | "In Progress" | "Completed" | "Cancelled";
   assignedUserId?: string;
+  assignedUserName?: string;
   wardNumber?: number;
   complaintId?: string;
+  createdById?: string;
+  createdByName?: string;
+  dateCreated?: string;
 }
 
 export interface Task {

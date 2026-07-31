@@ -11,7 +11,8 @@ import {
   deleteNotification,
   getSyncStatus,
   getChatRooms,
-  saveChatRooms
+  saveChatRooms,
+  getUnreadChatCount
 } from "../db";
 import { User, Complaint, Technician, ComplaintLog, ComplaintComment, ComplaintStatus, ComplaintPriority, UserRole, ChatRoom, Notification } from "../types";
 import { Skeleton, SkeletonCard, DashboardSkeleton } from "./Skeleton";
@@ -51,7 +52,7 @@ import {
 
 import InternalChat from "./InternalChat";
 import MunicipalCalendar from "./MunicipalCalendar";
-import InteractiveGIS from "./InteractiveGIS";
+import SharedGISMap from "./SharedGISMap";
 import DocumentManager from "./DocumentManager";
 import DigitalForms from "./DigitalForms";
 import FileUploader from "./FileUploader";
@@ -138,7 +139,7 @@ export default function TechnicianDashboard({
   };
 
   // Material Request States
-  const [materialType, setMaterialType] = useState("Pipes & Couplings");
+  const [materialType, setMaterialType] = useState("");
   const [materialQty, setMaterialQty] = useState("1");
   const [materialSupplier, setMaterialSupplier] = useState("Vhembe Hardware Wholesale");
   const [showMaterialModal, setShowMaterialModal] = useState(false);
@@ -500,6 +501,11 @@ export default function TechnicianDashboard({
   };
 
   const handleRequestMaterials = (complaintId: string) => {
+    if (!materialType) {
+      onAddToast("Validation Error", "Please select a material category.", "warning");
+      return;
+    }
+
     const allComps = getComplaints();
     const updated = allComps.map(c => {
       if (c.id === complaintId) {
@@ -542,6 +548,7 @@ export default function TechnicianDashboard({
     );
 
     onAddToast("Requisition Submitted", "Material request transmitted to civic depot manager.", "success");
+    setMaterialType("");
     setShowMaterialModal(false);
     loadTechData();
     if (selectedComplaint && selectedComplaint.id === complaintId) {
@@ -790,12 +797,19 @@ export default function TechnicianDashboard({
             <button
               id="tech-tab-chat"
               onClick={() => setActiveTab("chat")}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-bold uppercase tracking-wider transition-all ${
                 activeTab === "chat" ? "bg-gov-blue text-white shadow-md" : "hover:bg-slate-800 hover:text-white text-slate-400"
               }`}
             >
-              <MessageSquare size={16} />
-              <span>Internal Chat</span>
+              <div className="flex items-center space-x-3">
+                <MessageSquare size={16} />
+                <span>Internal Chat</span>
+              </div>
+              {getUnreadChatCount(currentUser.id) > 0 && (
+                <span className="bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {getUnreadChatCount(currentUser.id)}
+                </span>
+              )}
             </button>
 
             <button
@@ -1369,7 +1383,7 @@ export default function TechnicianDashboard({
         )}
 
         {activeTab === "gis" && (
-          <InteractiveGIS currentUser={currentUser} onAddToast={onAddToast} />
+          <SharedGISMap currentUser={currentUser} onAddToast={onAddToast} />
         )}
 
         {activeTab === "documents" && (
@@ -1822,10 +1836,12 @@ export default function TechnicianDashboard({
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Material Category / Type</label>
                 <select
+                  required
                   value={materialType}
                   onChange={(e) => setMaterialType(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold text-base"
                 >
+                  <option value="">Select category</option>
                   <option value="PVC Water Pipes 110mm">PVC Water Pipes 110mm</option>
                   <option value="Heavy Duty Couplings">Heavy Duty Couplings</option>
                   <option value="Submersible Borehole Pump 1.5kW">Submersible Borehole Pump 1.5kW</option>
