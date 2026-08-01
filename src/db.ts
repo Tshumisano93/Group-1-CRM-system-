@@ -107,26 +107,18 @@ export function initializeDb() {
   } catch (e) {
     currentUsers = [];
   }
-  if (!Array.isArray(currentUsers) || currentUsers.length === 0) {
-    if (isDemoMode) {
-      localStorage.setItem("thulamela_crm_users", JSON.stringify(SEED_USERS));
-    } else {
-      localStorage.setItem("thulamela_crm_users", JSON.stringify([]));
-    }
-  } else {
-    const userMap = new Map<string, User>();
-    // Ensure foundation is SEED_USERS if in demo mode
-    if (isDemoMode) {
-      SEED_USERS.forEach(u => userMap.set(u.id, u));
-    }
-    // Keep or update any custom fields/creations
+  const userMap = new Map<string, User>();
+  // Always ensure SEED_USERS foundation is present
+  SEED_USERS.forEach(u => userMap.set(u.id, u));
+
+  if (Array.isArray(currentUsers)) {
     currentUsers.forEach((u: any) => {
       if (u && u.id) {
         userMap.set(u.id, { ...userMap.get(u.id), ...u });
       }
     });
-    localStorage.setItem("thulamela_crm_users", JSON.stringify(Array.from(userMap.values())));
   }
+  localStorage.setItem("thulamela_crm_users", JSON.stringify(Array.from(userMap.values())));
   if (!localStorage.getItem("thulamela_crm_wards")) {
     localStorage.setItem("thulamela_crm_wards", JSON.stringify(SEED_WARDS));
   }
@@ -603,9 +595,8 @@ export function getUsers(): User[] {
   }
   
   const userMap = new Map<string, User>();
-  if (isDemoMode) {
-    SEED_USERS.forEach(u => userMap.set(u.id, u));
-  }
+  // Always include SEED_USERS as foundation/fallback
+  SEED_USERS.forEach(u => userMap.set(u.id, u));
   
   if (Array.isArray(users)) {
     users.forEach((u: any) => {
