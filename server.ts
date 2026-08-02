@@ -4,62 +4,103 @@ import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import admin from "firebase-admin";
+import { getApps, initializeApp as initAdminApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 import crypto from "crypto";
 
-dotenv.config();
+// Process level safety guards
+process.on("uncaughtException", (err) => {
+  console.error("[SERVER] Uncaught Exception caught safely:", err?.message || err);
+});
 
-// Load firebase-applet-config.json
-const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-let firebaseConfig: any = {};
-if (fs.existsSync(configPath)) {
+process.on("unhandledRejection", (reason: any) => {
+  console.error("[SERVER] Unhandled Rejection caught safely:", reason?.message || reason);
+});
+
+console.log("Thulamela CRM server starting...");
+dotenv.config();
+console.log("Environment loaded");
+
+let adminApp: any = null;
+let isFirebaseInitialized = false;
+let firebaseInitReason: string | null = null;
+
+function initializeFirebaseSafely(): boolean {
+  if (isFirebaseInitialized) return true;
+
   try {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  } catch (err) {
-    console.error("Failed to parse firebase-applet-config.json:", err);
+    const existingApps = getApps();
+    if (existingApps.length > 0) {
+      adminApp = existingApps[0];
+      isFirebaseInitialized = true;
+      console.log("Firebase Admin initialized");
+      console.log("Firestore connection initialized");
+      return true;
+    }
+
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let firebaseConfig: any = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      } catch (err: any) {
+        console.warn("Failed to parse firebase-applet-config.json:", err.message);
+      }
+    }
+
+    if (firebaseConfig.projectId) {
+      adminApp = initAdminApp({
+        projectId: firebaseConfig.projectId
+      });
+      isFirebaseInitialized = true;
+      console.log("Firebase Admin initialized");
+      console.log("Firestore connection initialized");
+      return true;
+    } else {
+      adminApp = initAdminApp();
+      isFirebaseInitialized = true;
+      console.log("Firebase Admin initialized");
+      console.log("Firestore connection initialized");
+      return true;
+    }
+  } catch (err: any) {
+    isFirebaseInitialized = false;
+    firebaseInitReason = err?.message || String(err);
+    console.warn("Firebase Admin unavailable — running in limited development mode.");
+    console.warn(`Reason: ${firebaseInitReason}`);
+    return false;
   }
 }
 
-// Initialize firebase-admin with Application Default Credentials or firebaseConfig
-let adminApp: any;
-let isFirebaseInitialized = false;
-
-function ensureFirebaseInitialized() {
-  if (isFirebaseInitialized) return;
-
-  try {
-    if (firebaseConfig.projectId) {
-      adminApp = admin.initializeApp({
-        projectId: firebaseConfig.projectId
-      });
-      console.log("Firebase Admin initialized successfully with projectId:", firebaseConfig.projectId);
-    } else {
-      adminApp = admin.initializeApp();
-      console.log("Firebase Admin initialized with default credentials");
+function getFirebaseConfigSafely(): any {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    } catch (err) {
+      return {};
     }
-    isFirebaseInitialized = true;
-  } catch (err) {
-    console.warn("Failed to initialize Firebase Admin:", err);
-    isFirebaseInitialized = false;
   }
+  return {};
 }
 
 function getAdminDb() {
-  ensureFirebaseInitialized();
-  if (!adminApp) {
-    throw new Error("Firebase Admin SDK is not initialized. Please check configuration.");
+  initializeFirebaseSafely();
+  if (!isFirebaseInitialized || !adminApp) {
+    throw new Error(`Firebase Admin SDK is unavailable. (${firebaseInitReason || "Not initialized"})`);
   }
+  const firebaseConfig = getFirebaseConfigSafely();
   return firebaseConfig.firestoreDatabaseId
     ? getFirestore(adminApp, firebaseConfig.firestoreDatabaseId)
     : getFirestore(adminApp);
 }
 
 function getAdminAuth() {
-  ensureFirebaseInitialized();
-  if (!adminApp) {
-    throw new Error("Firebase Admin SDK is not initialized. Please check configuration.");
+  initializeFirebaseSafely();
+  if (!isFirebaseInitialized || !adminApp) {
+    throw new Error(`Firebase Admin SDK is unavailable. (${firebaseInitReason || "Not initialized"})`);
   }
   return getAuth(adminApp);
 }
@@ -112,6 +153,49 @@ app.post("/api/auth/check-status", async (req, res) => {
   }
 });
 
+// Resolve a user profile from Firestore by username, email, employeeNumber, or ID
+app.post("/api/auth/resolve-user", async (req, res) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier) {
+      return res.status(400).json({ error: "Identifier is required." });
+    }
+
+    const norm = identifier.trim().toLowerCase().replace(/\s+/g, "");
+
+    try {
+      const dbInstance = getAdminDb();
+      const usersRef = dbInstance.collection("users");
+
+      let snapshot = await usersRef.where("username", "==", norm).get();
+      if (snapshot.empty) {
+        snapshot = await usersRef.where("email", "==", norm).get();
+      }
+      if (snapshot.empty) {
+        snapshot = await usersRef.where("employeeNumber", "==", norm).get();
+      }
+      if (snapshot.empty) {
+        const docById = await usersRef.doc(identifier.trim()).get();
+        if (docById.exists) {
+          return res.json({ user: docById.data() });
+        }
+      }
+
+      if (!snapshot.empty) {
+        const userDoc = snapshot.docs[0].data();
+        return res.json({ user: userDoc });
+      }
+    } catch (dbErr: any) {
+      console.warn("Firestore lookup failed during user resolution:", dbErr.message);
+    }
+
+    return res.json({ user: null });
+  } catch (err: any) {
+    console.warn("User resolution failed:", err.message);
+    return res.json({ user: null, error: err.message });
+  }
+});
+
 // Helper to verify Admin ID Token and check if the user is an authorized admin
 async function verifyAdminCaller(req: express.Request, res: express.Response): Promise<any | null> {
   const authHeader = req.headers.authorization;
@@ -132,8 +216,8 @@ async function verifyAdminCaller(req: express.Request, res: express.Response): P
     }
 
     const callerData = callerDoc.data();
-    if (callerData?.role !== "super_admin" && callerData?.role !== "municipal_admin") {
-      res.status(403).json({ error: "Access denied. Only municipal/super administrators can perform this action." });
+    if (callerData?.role !== "super_admin" && callerData?.role !== "municipal_admin" && callerData?.role !== "sub_admin") {
+      res.status(403).json({ error: "Access denied. Administrative or Sub-Admin privileges required." });
       return null;
     }
 
@@ -151,7 +235,7 @@ app.post("/api/admin/users/create", async (req, res) => {
     const caller = await verifyAdminCaller(req, res);
     if (!caller) return; // Response sent in helper
 
-    const {
+    let {
       email,
       password,
       name,
@@ -173,20 +257,31 @@ app.post("/api/admin/users/create", async (req, res) => {
       return res.status(400).json({ error: "Mandatory fields: email, password, name, username, and role are required." });
     }
 
-    if (role === "sub_admin" && !departmentId) {
-      return res.status(400).json({ error: "A Sub-Admin must be assigned to a specific municipal department." });
-    }
-
     const validRoles = ["super_admin", "municipal_admin", "technician", "councillor", "sub_admin"];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: `Invalid role specified: "${role}".` });
     }
 
-    // Role safety: Only super_admin can create admin roles
-    if (role === "super_admin" || role === "municipal_admin") {
-      if (caller.role !== "super_admin") {
+    // Role safety & permissions
+    if (caller.role === "sub_admin") {
+      if (role !== "technician") {
+        return res.status(403).json({ error: "Access denied. Sub-Administrators can only provision Technician accounts." });
+      }
+      // Enforce department match for Sub-Admin
+      departmentId = caller.departmentId || departmentId;
+      departmentName = caller.departmentName || departmentName;
+    } else if (caller.role === "municipal_admin") {
+      if (role === "super_admin" || role === "municipal_admin") {
         return res.status(403).json({ error: "Access denied. Only Super Administrators can provision administrative accounts." });
       }
+    }
+
+    if (role === "sub_admin" && !departmentId) {
+      return res.status(400).json({ error: "A Sub-Admin must be assigned to a specific municipal department." });
+    }
+
+    if (role === "technician" && !departmentId) {
+      return res.status(400).json({ error: "A Technician must be assigned to a specific municipal department." });
     }
 
     // Double check duplicate usernames or emails in Firestore
@@ -229,41 +324,85 @@ app.post("/api/admin/users/create", async (req, res) => {
     };
 
     await getAdminDb().collection("users").doc(authUser.uid).set(newUser);
+
+    // 3. If role === technician, create record in technicians collection
+    if (role === "technician") {
+      const newTechDoc = {
+        id: authUser.uid,
+        name: name.trim(),
+        departmentId: departmentId || "",
+        departmentName: departmentName || "",
+        phone: (phone || "").trim(),
+        email: email.trim().toLowerCase(),
+        status: "available",
+        activeTasks: 0,
+        completedTasks: 0
+      };
+      await getAdminDb().collection("technicians").doc(authUser.uid).set(newTechDoc);
+    }
+
     console.log(`Secured account provisioned successfully: ${email} UID: ${authUser.uid}`);
 
-    res.json({ uid: authUser.uid, message: "User provisioned successfully." });
+    res.json({ uid: authUser.uid, user: newUser, message: "User provisioned successfully." });
   } catch (err: any) {
     console.error("User creation failed:", err);
     res.status(500).json({ error: err.message || "An unexpected error occurred during user provisioning." });
   }
 });
 
-// Secure Toggle User Status Route (Allows Super Admins to suspend/unsuspend user accounts)
+// Secure Toggle User Status Route
 app.post("/api/admin/users/toggle-status", async (req, res) => {
   try {
     const caller = await verifyAdminCaller(req, res);
     if (!caller) return; // Response sent in helper
-
-    if (caller.role !== "super_admin") {
-      return res.status(403).json({ error: "Access denied. Only Super Administrators can alter user account statuses." });
-    }
 
     const { userId, currentStatus } = req.body;
     if (!userId || !currentStatus) {
       return res.status(400).json({ error: "Missing required fields: userId and currentStatus." });
     }
 
-    const nextStatus = currentStatus === "active" ? "inactive" : "active";
+    const targetUserDoc = await getAdminDb().collection("users").doc(userId).get();
+    if (!targetUserDoc.exists) {
+      return res.status(404).json({ error: "Target user account not found." });
+    }
+    const targetUser = targetUserDoc.data();
+
+    if (caller.role === "sub_admin") {
+      if (targetUser?.role !== "technician" || targetUser?.departmentId !== caller.departmentId) {
+        return res.status(403).json({ error: "Access denied. Sub-Administrators can only modify technicians in their own department." });
+      }
+    } else if (caller.role === "municipal_admin") {
+      if (targetUser?.role === "super_admin") {
+        return res.status(403).json({ error: "Access denied. Municipal Administrators cannot alter Super Admin account status." });
+      }
+    }
+
+    const nextStatus = (currentStatus === "active" || currentStatus === "available" || currentStatus === "busy") ? "inactive" : "active";
 
     // 1. Update in Firebase Authentication (disable / enable user)
-    await getAdminAuth().updateUser(userId, {
-      disabled: nextStatus === "inactive"
-    });
+    try {
+      await getAdminAuth().updateUser(userId, {
+        disabled: nextStatus === "inactive"
+      });
+    } catch (authErr: any) {
+      console.warn("Firebase Auth status update skipped/warning:", authErr.message);
+    }
 
     // 2. Update in Firestore profile
     await getAdminDb().collection("users").doc(userId).update({
       status: nextStatus
     });
+
+    // 3. If target is technician, update technician document status if applicable
+    if (targetUser?.role === "technician") {
+      try {
+        await getAdminDb().collection("technicians").doc(userId).update({
+          status: nextStatus === "inactive" ? "on_leave" : "available"
+        });
+      } catch (techErr: any) {
+        console.warn("Technician document status update warning:", techErr.message);
+      }
+    }
 
     console.log(`User status altered successfully. UID: ${userId}, Status: ${nextStatus}`);
     res.json({ success: true, nextStatus });
@@ -451,9 +590,8 @@ Return your response as a JSON object:
 // Automatic account syncing & provisioning on server startup
 async function autoProvisionAuthUsers() {
   try {
-    ensureFirebaseInitialized();
-    if (!isFirebaseInitialized) {
-      console.log("[AUTH PROVISION]: Firebase is not initialized. Skipping automatic account linking.");
+    if (!initializeFirebaseSafely()) {
+      console.log("[AUTH PROVISION]: Firebase Admin unavailable. Skipping automatic account linking.");
       return;
     }
 
@@ -487,7 +625,7 @@ async function autoProvisionAuthUsers() {
         existingUser = await adminAuth.getUserByEmail(normalizedEmail);
       } catch (err: any) {
         if (err.code !== "auth/user-not-found" && !err.message?.includes("user-not-found")) {
-          console.error(`[AUTH PROVISION ERROR]: Failed checking email ${email}:`, err);
+          console.error(`[AUTH PROVISION ERROR]: Failed checking email ${email}:`, err.message || err);
           continue;
         }
       }
@@ -527,11 +665,14 @@ async function autoProvisionAuthUsers() {
 
 // Vite middleware for development or Static Asset serving for production
 async function start() {
+  console.log("Express server initialized");
+  console.log("API routes registered");
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { 
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === "true" ? false : false,
+        hmr: false,
       },
       appType: "spa",
     });
@@ -545,11 +686,18 @@ async function start() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    // Run auth provisioning asynchronously on start
-    autoProvisionAuthUsers().catch(err => {
-      console.warn("Failed executing background auth provisioning:", err);
-    });
+    console.log(`Server listening on port ${PORT}`);
+    // Run Firebase initialization & auth provisioning safely in background after Express server is listening
+    setTimeout(() => {
+      try {
+        initializeFirebaseSafely();
+        autoProvisionAuthUsers().catch(err => {
+          console.warn("Failed executing background auth provisioning:", err?.message || err);
+        });
+      } catch (err: any) {
+        console.warn("Background Firebase startup task error caught safely:", err?.message || err);
+      }
+    }, 100);
   });
 }
 

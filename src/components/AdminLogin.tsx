@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Lock, User as UserIcon, ShieldAlert, KeyRound, Eye, EyeOff } from "lucide-react";
-import { getUsers, setCurrentUser, addAuditLog, getSyncStatus } from "../db";
+import { getUsers, setCurrentUser, addAuditLog, getSyncStatus, findUserByIdentifier } from "../db";
 import { User } from "../types";
 import { isFirebaseEnabled, auth } from "../firebase";
 import { signInWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
@@ -42,16 +42,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
         return;
       }
       
-      const users = Array.isArray(getUsers()) ? getUsers() : [];
-      console.log(`[DATABASE QUERY]: Successfully retrieved ${users.length} total active users from database.`);
-
-      const matchedUser = users.find(
-        (u) =>
-          (u.username || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal ||
-          (u.email || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal ||
-          (u.id || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal ||
-          (u.employeeNumber || "").trim().toLowerCase().replace(/\s+/g, "") === enteredVal
-      );
+      const matchedUser = await findUserByIdentifier(enteredVal);
 
       if (matchedUser) {
         console.log(`[LOGIN MATCH FOUND]: User matching identifier "${enteredVal}" was found! Name: "${matchedUser.name}", ID: "${matchedUser.id}", Role: "${matchedUser.role}"`);
@@ -78,31 +69,6 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
       }
 
       if (isFirebaseEnabled && auth) {
-        let hasAuthAccount = false;
-        try {
-          // Check server-side first to bypass email enumeration protection issues cleanly
-          const checkRes = await fetch("/api/auth/check-status", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: matchedUser.email })
-          });
-          if (checkRes.ok) {
-            const checkData = await checkRes.json();
-            hasAuthAccount = !!checkData.exists;
-          } else {
-            hasAuthAccount = true; // Fallback
-          }
-        } catch (fetchErr: any) {
-          console.warn("[FIRESTORE WARNING]: Could not connect to the check-status endpoint, using local fallback.");
-          hasAuthAccount = true;
-        }
-
-        if (!hasAuthAccount) {
-          setLoading(false);
-          onAddToast("Authentication Failed", "Firebase authentication account is not configured", "error");
-          return;
-        }
-
         try {
           await signInWithEmailAndPassword(auth, matchedUser.email, password);
         } catch (err: any) {
@@ -115,33 +81,21 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
           }
 
           if (
-            err.code === "auth/user-not-found" ||
-            err.message?.includes("user-not-found")
-          ) {
-            setLoading(false);
-            onAddToast("Authentication Failed", "Firebase authentication account is not configured", "error");
-            return;
-          }
-
-          if (
             err.code === "auth/wrong-password" ||
             err.code === "auth/invalid-credential" ||
-            err.message?.includes("wrong-password") ||
-            err.message?.includes("invalid-credential")
+            err.message?.includes("password") ||
+            err.message?.includes("invalid-credential") ||
+            err.message?.includes("wrong-password")
           ) {
             setLoading(false);
-            onAddToast("Authentication Failed", "Incorrect password", "error");
+            onAddToast("Authentication Failed", "Invalid password provided", "error");
             return;
           }
 
           setLoading(false);
-          onAddToast("Authentication Failed", `Authentication error: ${err.message}`, "error");
+          onAddToast("Authentication Failed", err.message || "Invalid credentials", "error");
           return;
         }
-      } else {
-        setLoading(false);
-        onAddToast("Authentication Failed", "Unable to connect to the CRM database", "error");
-        return;
       }
 
       // Success

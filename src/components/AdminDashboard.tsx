@@ -56,7 +56,8 @@ import {
   Clipboard,
   CheckSquare,
   Download,
-  Bell
+  Bell,
+  Plus
 } from "lucide-react";
 
 import InternalChat from "./InternalChat";
@@ -317,6 +318,177 @@ export default function AdminDashboard({
   const [newSubAdminConfirmPassword, setNewSubAdminConfirmPassword] = useState("");
   const [newSubAdminProfilePic, setNewSubAdminProfilePic] = useState("");
   const [subAdminSearch, setSubAdminSearch] = useState("");
+
+  // Provision Technician Form State for Admin
+  const [showAddTechModalAdmin, setShowAddTechModalAdmin] = useState(false);
+  const [newTechNameAdmin, setNewTechNameAdmin] = useState("");
+  const [newTechEmailAdmin, setNewTechEmailAdmin] = useState("");
+  const [newTechPhoneAdmin, setNewTechPhoneAdmin] = useState("");
+  const [newTechUsernameAdmin, setNewTechUsernameAdmin] = useState("");
+  const [newTechPasswordAdmin, setNewTechPasswordAdmin] = useState("");
+  const [newTechEmpNumberAdmin, setNewTechEmpNumberAdmin] = useState("");
+  const [newTechDeptIdAdmin, setNewTechDeptIdAdmin] = useState("");
+  const [newTechAddressAdmin, setNewTechAddressAdmin] = useState("");
+  const [newTechSaIdAdmin, setNewTechSaIdAdmin] = useState("");
+  const [isSubmittingTechAdmin, setIsSubmittingTechAdmin] = useState(false);
+
+  // Technician Status Toggle Confirmation Modal State
+  const [techConfirmModal, setTechConfirmModal] = useState<{
+    show: boolean;
+    tech: Technician | null;
+    action: "deactivate" | "reactivate";
+  }>({
+    show: false,
+    tech: null,
+    action: "deactivate"
+  });
+
+  const handleProvisionTechnicianAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin") {
+      onAddToast("Unauthorized Action", "Only Administrators can provision Technician accounts.", "error");
+      return;
+    }
+
+    if (!newTechNameAdmin.trim() || !newTechEmailAdmin.trim() || !newTechUsernameAdmin.trim() || !newTechPasswordAdmin.trim() || !newTechDeptIdAdmin.trim()) {
+      onAddToast("Validation Error", "Please fill in all mandatory fields, including selecting a department.", "warning");
+      return;
+    }
+
+    const selectedDept = departments.find(d => d.id === newTechDeptIdAdmin);
+    if (!selectedDept) {
+      onAddToast("Validation Error", "Please select a valid municipal department.", "warning");
+      return;
+    }
+
+    setIsSubmittingTechAdmin(true);
+
+    try {
+      const techPayload = {
+        email: newTechEmailAdmin.trim(),
+        password: newTechPasswordAdmin,
+        name: newTechNameAdmin.trim(),
+        phone: newTechPhoneAdmin.trim(),
+        physicalAddress: newTechAddressAdmin.trim() || "Thulamela Field Engineering Office",
+        username: newTechUsernameAdmin.trim(),
+        role: "technician",
+        employeeNumber: newTechEmpNumberAdmin.trim() || `EMP-TECH-${Date.now().toString().slice(-4)}`,
+        saIdNumber: newTechSaIdAdmin.trim(),
+        departmentId: selectedDept.id,
+        departmentName: selectedDept.name
+      };
+
+      let createdUid = "";
+      if (isFirebaseEnabled && auth) {
+        createdUid = await createSecureUserInBackend(techPayload);
+      } else {
+        createdUid = `TECH-${Date.now().toString().slice(-4)}`;
+      }
+
+      const newTechObj: Technician = {
+        id: createdUid,
+        name: newTechNameAdmin.trim(),
+        departmentId: selectedDept.id,
+        departmentName: selectedDept.name,
+        phone: newTechPhoneAdmin.trim(),
+        email: newTechEmailAdmin.trim(),
+        status: "available",
+        activeTasks: 0,
+        completedTasks: 0
+      };
+
+      const allTechs = getTechnicians();
+      saveTechnicians([...allTechs.filter(t => t.id !== createdUid), newTechObj]);
+
+      const allUsers = getUsers();
+      const newUserObj: User = {
+        id: createdUid,
+        name: newTechNameAdmin.trim(),
+        email: newTechEmailAdmin.trim(),
+        phone: newTechPhoneAdmin.trim(),
+        physicalAddress: newTechAddressAdmin.trim() || "Thulamela Field Engineering Office",
+        username: newTechUsernameAdmin.trim(),
+        role: "technician",
+        employeeNumber: newTechEmpNumberAdmin.trim() || `EMP-TECH-${Date.now().toString().slice(-4)}`,
+        saIdNumber: newTechSaIdAdmin.trim(),
+        departmentId: selectedDept.id,
+        departmentName: selectedDept.name,
+        status: "active",
+        dateCreated: new Date().toISOString()
+      };
+      saveUsers([...allUsers.filter(u => u.id !== createdUid), newUserObj]);
+
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "CREATE_TECHNICIAN",
+        `Provisioned technician account for ${newTechNameAdmin} assigned to ${selectedDept.name}.`
+      );
+
+      onAddToast("Technician Provisioned", `Technician account for ${newTechNameAdmin} created successfully.`, "success");
+
+      setShowAddTechModalAdmin(false);
+      setNewTechNameAdmin("");
+      setNewTechEmailAdmin("");
+      setNewTechPhoneAdmin("");
+      setNewTechUsernameAdmin("");
+      setNewTechPasswordAdmin("");
+      setNewTechEmpNumberAdmin("");
+      setNewTechDeptIdAdmin("");
+      setNewTechAddressAdmin("");
+      setNewTechSaIdAdmin("");
+      loadDashboardData();
+    } catch (err: any) {
+      onAddToast("Provisioning Failed", err.message || "Could not provision technician.", "error");
+    } finally {
+      setIsSubmittingTechAdmin(false);
+    }
+  };
+
+  const handleConfirmToggleTechStatusAdmin = async () => {
+    if (!techConfirmModal.tech) return;
+    const tech = techConfirmModal.tech;
+    const currentStatus = tech.status;
+
+    try {
+      if (isFirebaseEnabled && auth) {
+        await toggleUserStatusInBackend(tech.id, currentStatus);
+      }
+
+      const isDeactivating = techConfirmModal.action === "deactivate";
+      const nextTechStatus = isDeactivating ? "on_leave" : "available";
+      const nextUserStatus = isDeactivating ? "inactive" : "active";
+
+      const allTechs = getTechnicians();
+      const updatedTechs = allTechs.map(t => t.id === tech.id ? { ...t, status: nextTechStatus as any } : t);
+      saveTechnicians(updatedTechs);
+
+      const allUsers = getUsers();
+      const updatedUsers = allUsers.map(u => u.id === tech.id ? { ...u, status: nextUserStatus as any } : u);
+      saveUsers(updatedUsers);
+
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "TOGGLE_USER_STATUS",
+        `Altered technician account status for ${tech.name} (${tech.id}) to ${nextUserStatus}.`
+      );
+
+      onAddToast(
+        isDeactivating ? "Technician Deactivated" : "Technician Reactivated",
+        `Technician account for ${tech.name} has been ${isDeactivating ? "deactivated" : "reactivated"} successfully.`,
+        "success"
+      );
+
+      setTechConfirmModal({ show: false, tech: null, action: "deactivate" });
+      loadDashboardData();
+    } catch (err: any) {
+      onAddToast("Status Modification Failed", err.message || "Could not alter technician status.", "error");
+    }
+  };
 
   const handleCreateSubAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -641,8 +813,8 @@ export default function AdminDashboard({
 
   // Deactivate Councillor account
   const handleToggleUserStatus = async (userId: string, currentStatus: "active" | "inactive") => {
-    if (currentUser.role !== "super_admin") {
-      onAddToast("Unauthorized Action", "Only Super Administrators can modify account status.", "error");
+    if (currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin") {
+      onAddToast("Unauthorized Action", "Only Administrators can modify account status.", "error");
       return;
     }
 
@@ -2095,50 +2267,85 @@ export default function AdminDashboard({
           <div id="admin-pane-technicians" className="space-y-6">
             
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-              <div className="border-b border-slate-100 pb-3">
-                <h3 className="font-black text-slate-900 uppercase text-xs tracking-wider">Active Field Technicians Directory</h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Review dispatch workload and active tickets per municipal engineering department.</p>
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h3 className="font-black text-slate-900 uppercase text-xs tracking-wider">Active Field Technicians Directory</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Review dispatch workload and active tickets per municipal engineering department.</p>
+                </div>
+                {(currentUser.role === "super_admin" || currentUser.role === "municipal_admin") && (
+                  <button
+                    onClick={() => setShowAddTechModalAdmin(true)}
+                    className="px-4 py-2.5 bg-gov-blue hover:bg-gov-blue/90 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center space-x-2 transition-all self-start sm:self-auto"
+                  >
+                    <Plus size={16} />
+                    <span>Provision Technician</span>
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-xs">
-                {technicians.map(tech => (
-                  <div key={tech.id} className="border border-slate-100 bg-slate-50 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-[9px] font-mono font-bold bg-gov-blue/10 text-gov-blue px-2 py-0.5 rounded uppercase">
-                            {tech.id}
-                          </span>
-                          <h4 className="font-black text-slate-950 text-base mt-1">{tech.name}</h4>
-                          <span className="text-[10px] text-slate-400 font-mono block">{tech.departmentName}</span>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                          tech.status === "available" ? "bg-emerald-100 text-emerald-800"
-                            : tech.status === "busy" ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-500"
-                        }`}>
-                          {tech.status.replace("_", " ")}
-                        </span>
-                      </div>
-
-                      <div className="border-t border-slate-200/60 pt-3 grid grid-cols-2 gap-4 text-center font-mono">
-                        <div className="bg-white border border-slate-200/50 p-2 rounded-lg">
-                          <span className="text-[9px] text-slate-400 uppercase font-sans font-bold">Active Jobs</span>
-                          <p className="text-base font-black text-slate-800 mt-0.5">{tech.activeTasks}</p>
-                        </div>
-                        <div className="bg-white border border-slate-200/50 p-2 rounded-lg">
-                          <span className="text-[9px] text-slate-400 uppercase font-sans font-bold">Closed Jobs</span>
-                          <p className="text-base font-black text-slate-800 mt-0.5">{tech.completedTasks}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-200/60 pt-3 text-[10px] text-slate-500 space-y-1">
-                      <span className="block font-bold">Direct Mobile: <span className="font-mono text-slate-800">{tech.phone}</span></span>
-                      <span className="block font-bold">LDAP Email: <span className="font-mono text-slate-800">{tech.email}</span></span>
-                    </div>
+                {technicians.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
+                    No field technicians currently registered. Click "Provision Technician" above to add new technical personnel.
                   </div>
-                ))}
+                ) : (
+                  technicians.map(tech => (
+                    <div key={tech.id} className="border border-slate-100 bg-slate-50 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[9px] font-mono font-bold bg-gov-blue/10 text-gov-blue px-2 py-0.5 rounded uppercase">
+                              {tech.id}
+                            </span>
+                            <h4 className="font-black text-slate-950 text-base mt-1">{tech.name}</h4>
+                            <span className="text-[10px] text-slate-400 font-mono block">{tech.departmentName}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                            tech.status === "available" ? "bg-emerald-100 text-emerald-800"
+                              : tech.status === "busy" ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-500"
+                          }`}>
+                            {tech.status.replace("_", " ")}
+                          </span>
+                        </div>
+
+                        <div className="border-t border-slate-200/60 pt-3 grid grid-cols-2 gap-4 text-center font-mono">
+                          <div className="bg-white border border-slate-200/50 p-2 rounded-lg">
+                            <span className="text-[9px] text-slate-400 uppercase font-sans font-bold">Active Jobs</span>
+                            <p className="text-base font-black text-slate-800 mt-0.5">{tech.activeTasks}</p>
+                          </div>
+                          <div className="bg-white border border-slate-200/50 p-2 rounded-lg">
+                            <span className="text-[9px] text-slate-400 uppercase font-sans font-bold">Closed Jobs</span>
+                            <p className="text-base font-black text-slate-800 mt-0.5">{tech.completedTasks}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200/60 pt-3 text-[10px] text-slate-500 space-y-1">
+                        <span className="block font-bold">Direct Mobile: <span className="font-mono text-slate-800">{tech.phone || "N/A"}</span></span>
+                        <span className="block font-bold">LDAP Email: <span className="font-mono text-slate-800">{tech.email || "N/A"}</span></span>
+                      </div>
+
+                      <div className="border-t border-slate-200/60 pt-3">
+                        {(tech.status === "on_leave" || tech.status === "inactive") ? (
+                          <button
+                            onClick={() => setTechConfirmModal({ show: true, tech, action: "reactivate" })}
+                            className="w-full py-2 px-3 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1"
+                          >
+                            <span>Reactivate Account</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setTechConfirmModal({ show: true, tech, action: "deactivate" })}
+                            className="w-full py-2 px-3 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1"
+                          >
+                            <span>Deactivate Account</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -2563,6 +2770,224 @@ export default function AdminDashboard({
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* PROVISION TECHNICIAN MODAL (ADMIN) */}
+      {showAddTechModalAdmin && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden border border-slate-100 my-8 animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gov-blue text-white p-6 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold">Provision Field Technician</h3>
+                <p className="text-xs text-blue-100">Create an authenticated technician account with municipal department assignment</p>
+              </div>
+              <button
+                onClick={() => setShowAddTechModalAdmin(false)}
+                className="p-1 hover:bg-white/10 rounded-lg text-blue-100 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleProvisionTechnicianAdmin} className="p-6 space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newTechNameAdmin}
+                  onChange={e => setNewTechNameAdmin(e.target.value)}
+                  placeholder="e.g., Lufuno Nethononda"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={newTechEmailAdmin}
+                    onChange={e => setNewTechEmailAdmin(e.target.value)}
+                    placeholder="tech@thulamela.gov.za"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700">Username / LDAP *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTechUsernameAdmin}
+                    onChange={e => setNewTechUsernameAdmin(e.target.value)}
+                    placeholder="e.g., tech_lufuno"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={newTechPhoneAdmin}
+                    onChange={e => setNewTechPhoneAdmin(e.target.value)}
+                    placeholder="+27 15 962 7500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700">Employee Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newTechEmpNumberAdmin}
+                    onChange={e => setNewTechEmpNumberAdmin(e.target.value)}
+                    placeholder="e.g., EMP-TECH-901"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700">Municipal Department *</label>
+                <select
+                  required
+                  value={newTechDeptIdAdmin}
+                  onChange={e => setNewTechDeptIdAdmin(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue bg-white"
+                >
+                  <option value="">Select Department...</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700">Temporary Password *</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newTechPasswordAdmin}
+                  onChange={e => setNewTechPasswordAdmin(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                />
+                <p className="text-[10px] text-slate-400">Password is authenticated via Firebase Auth. Plaintext passwords are never saved in Firestore or local databases.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700">SA ID Number (Optional)</label>
+                  <input
+                    type="text"
+                    value={newTechSaIdAdmin}
+                    onChange={e => setNewTechSaIdAdmin(e.target.value)}
+                    placeholder="8501015000088"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700">Physical Address (Optional)</label>
+                  <input
+                    type="text"
+                    value={newTechAddressAdmin}
+                    onChange={e => setNewTechAddressAdmin(e.target.value)}
+                    placeholder="Thohoyandou Unit 1"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gov-blue"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end space-x-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTechModalAdmin(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingTechAdmin}
+                  className="px-5 py-2 bg-gov-blue text-white font-bold rounded-lg hover:bg-gov-blue/90 disabled:opacity-50"
+                >
+                  {isSubmittingTechAdmin ? "Provisioning..." : "Provision Technician"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRMATION MODAL FOR DEACTIVATION / REACTIVATION (ADMIN) */}
+      {techConfirmModal.show && techConfirmModal.tech && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200 p-6 space-y-4">
+            <div className="flex items-center space-x-3 text-slate-900">
+              <div className={`p-3 rounded-xl ${techConfirmModal.action === "deactivate" ? "bg-rose-100 text-rose-600" : "bg-emerald-100 text-emerald-600"}`}>
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold">
+                  {techConfirmModal.action === "deactivate" ? "Deactivate Technician Account?" : "Reactivate Technician Account?"}
+                </h3>
+                <p className="text-xs text-slate-500">{techConfirmModal.tech.name} ({techConfirmModal.tech.departmentName})</p>
+              </div>
+            </div>
+
+            {techConfirmModal.action === "deactivate" ? (
+              <div className="space-y-3 text-xs text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200/60">
+                <p className="font-bold text-slate-800">
+                  Deactivating this technician account will disable their Firebase Authentication login credentials immediately.
+                </p>
+                <ul className="space-y-1.5 list-disc list-inside text-slate-600">
+                  <li>The technician will no longer be able to log in to the CRM or field mobile app.</li>
+                  <li>Existing complaints assigned to them remain intact.</li>
+                  <li>Existing schedules & calendar events remain intact.</li>
+                  <li>Existing tasks and dispatch history remain preserved.</li>
+                  <li>Completed work logs and audit history remain archived.</li>
+                  <li>The technician's historical identity is preserved across all municipal records.</li>
+                </ul>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-600 bg-emerald-50/60 p-4 rounded-xl border border-emerald-200/60">
+                <p>
+                  Reactivating this technician account will re-enable their Firebase Authentication login access, allowing them to log in and accept assigned field maintenance tickets.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setTechConfirmModal({ show: false, tech: null, action: "deactivate" })}
+                className="px-4 py-2 border border-slate-200 text-slate-600 font-bold rounded-lg hover:bg-slate-50 text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggleTechStatusAdmin}
+                className={`px-5 py-2 font-bold text-white rounded-lg text-xs transition-all ${
+                  techConfirmModal.action === "deactivate"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {techConfirmModal.action === "deactivate" ? "Confirm Deactivation" : "Confirm Reactivation"}
+              </button>
+            </div>
           </div>
         </div>
       )}

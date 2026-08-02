@@ -646,6 +646,80 @@ export function saveUsers(users: User[]) {
   }
 }
 
+export async function findUserByIdentifier(identifier: string): Promise<User | null> {
+  if (!identifier) return null;
+  const norm = identifier.trim().toLowerCase().replace(/\s+/g, "");
+
+  // 1. Local Cache Check
+  const localUsers = getUsers();
+  const matchedLocal = localUsers.find(u =>
+    (u.username || "").trim().toLowerCase().replace(/\s+/g, "") === norm ||
+    (u.email || "").trim().toLowerCase().replace(/\s+/g, "") === norm ||
+    (u.id || "").trim().toLowerCase().replace(/\s+/g, "") === norm ||
+    (u.employeeNumber || "").trim().toLowerCase().replace(/\s+/g, "") === norm
+  );
+
+  if (matchedLocal) {
+    return matchedLocal;
+  }
+
+  // 2. Query Server-side Resolution Route (bypasses unauthenticated Firestore rule restrictions)
+  try {
+    const res = await fetch("/api/auth/resolve-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: norm })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        const userObj: User = {
+          id: data.user.id,
+          name: data.user.name || "",
+          email: data.user.email || "",
+          phone: data.user.phone || "",
+          physicalAddress: data.user.physicalAddress || "",
+          username: data.user.username || "",
+          role: data.user.role || "municipal_admin",
+          employeeNumber: data.user.employeeNumber || "",
+          saIdNumber: data.user.saIdNumber || "",
+          wardNumber: data.user.wardNumber,
+          wardName: data.user.wardName,
+          politicalPosition: data.user.politicalPosition,
+          departmentId: data.user.departmentId,
+          departmentName: data.user.departmentName,
+          profilePicture: data.user.profilePicture || "",
+          status: data.user.status || "active",
+          dateCreated: data.user.dateCreated || new Date().toISOString()
+        };
+
+        const allLocal = getUsers();
+        const existingIdx = allLocal.findIndex(u => u.id === userObj.id);
+        if (existingIdx >= 0) {
+          allLocal[existingIdx] = userObj;
+        } else {
+          allLocal.push(userObj);
+        }
+        localStorage.setItem("thulamela_crm_users", JSON.stringify(allLocal));
+        triggerDbUpdateEvent();
+        return userObj;
+      }
+    }
+  } catch (err) {
+    console.warn("Server user resolution call failed:", err);
+  }
+
+  // 3. Fallback: SEED_USERS
+  const matchedSeed = SEED_USERS.find(u =>
+    (u.username || "").trim().toLowerCase().replace(/\s+/g, "") === norm ||
+    (u.email || "").trim().toLowerCase().replace(/\s+/g, "") === norm ||
+    (u.id || "").trim().toLowerCase().replace(/\s+/g, "") === norm ||
+    (u.employeeNumber || "").trim().toLowerCase().replace(/\s+/g, "") === norm
+  );
+
+  return matchedSeed || null;
+}
+
 export function getWards(): Ward[] {
   return JSON.parse(localStorage.getItem("thulamela_crm_wards") || "[]");
 }
