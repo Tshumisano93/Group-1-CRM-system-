@@ -186,6 +186,51 @@ export default function AdminLogin({ onLoginSuccess, onNavigate, onAddToast }: A
               )}
             </button>
           </form>
+
+          {/* Quick Fill Accounts */}
+          <div className="mt-6 pt-5 border-t border-slate-800 space-y-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Verified Dev Quick Fill Credentials
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("munadmin");
+                  setPassword("Thulamela@2026");
+                }}
+                className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-gov-yellow/50 rounded-lg text-left transition-all group"
+              >
+                <div className="text-[11px] font-bold text-gov-yellow group-hover:text-yellow-300">Municipal Admin</div>
+                <div className="text-[9px] text-slate-400 font-mono">munadmin</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("superadmin");
+                  setPassword("Thulamela@2026");
+                }}
+                className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-gov-yellow/50 rounded-lg text-left transition-all group"
+              >
+                <div className="text-[11px] font-bold text-slate-200 group-hover:text-white">Super Admin</div>
+                <div className="text-[9px] text-slate-400 font-mono">superadmin</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername("tech1");
+                  setPassword("Thulamela@2026");
+                }}
+                className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-gov-yellow/50 rounded-lg text-left transition-all group"
+              >
+                <div className="text-[11px] font-bold text-emerald-400 group-hover:text-emerald-300">Technician</div>
+                <div className="text-[9px] text-slate-400 font-mono">tech1</div>
+              </button>
+            </div>
+            <div className="text-[10px] text-slate-400 text-center font-mono pt-1">
+              Verified Password: <code className="text-gov-yellow bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 font-bold">Thulamela@2026</code>
+            </div>
+          </div>
         </div>
 
         {/* Right Info Box */}

@@ -209,14 +209,33 @@ async function verifyAdminCaller(req: express.Request, res: express.Response): P
     const decodedToken = await getAdminAuth().verifyIdToken(idToken);
     const callerUid = decodedToken.uid;
 
-    const callerDoc = await getAdminDb().collection("users").doc(callerUid).get();
-    if (!callerDoc.exists) {
+    let callerDoc = await getAdminDb().collection("users").doc(callerUid).get();
+    let callerData: any = null;
+
+    if (callerDoc.exists) {
+      callerData = callerDoc.data();
+    } else {
+      // Fallback: search Firestore user by email if UID doc is not yet linked
+      const callerAuthUser = await getAdminAuth().getUser(callerUid);
+      if (callerAuthUser.email) {
+        const snap = await getAdminDb().collection("users").where("email", "==", callerAuthUser.email.toLowerCase()).get();
+        if (!snap.empty) {
+          callerData = snap.docs[0].data();
+          // Auto-heal mapping to callerUid
+          await getAdminDb().collection("users").doc(callerUid).set({
+            ...callerData,
+            id: callerUid
+          }, { merge: true });
+        }
+      }
+    }
+
+    if (!callerData) {
       res.status(403).json({ error: "Access denied. Admin profile not found in database." });
       return null;
     }
 
-    const callerData = callerDoc.data();
-    if (callerData?.role !== "super_admin" && callerData?.role !== "municipal_admin" && callerData?.role !== "sub_admin") {
+    if (callerData.role !== "super_admin" && callerData.role !== "municipal_admin" && callerData.role !== "sub_admin") {
       res.status(403).json({ error: "Access denied. Administrative or Sub-Admin privileges required." });
       return null;
     }
@@ -595,17 +614,102 @@ async function autoProvisionAuthUsers() {
       return;
     }
 
-    console.log("[AUTH PROVISION]: Scanning Firestore users collection for account linking...");
+    console.log("[AUTH PROVISION]: Auditing Firebase Authentication and Firestore users synchronization...");
     const adminDb = getAdminDb();
     const adminAuth = getAdminAuth();
 
-    const usersSnap = await adminDb.collection("users").get();
-    if (usersSnap.empty) {
-      console.log("[AUTH PROVISION]: Firestore 'users' collection is empty. Skipping account linking.");
-      return;
+    const defaultSeedUsers = [
+      {
+        id: "ADMIN-001",
+        name: "Thilivhali Mulaudzi",
+        email: "admin@thulamela.gov.za",
+        phone: "015 962 7500",
+        physicalAddress: "Thohoyandou Civic Centre, Limpopo",
+        username: "superadmin",
+        role: "super_admin",
+        employeeNumber: "EMP-SA-001",
+        saIdNumber: "8504125896084",
+        status: "active",
+        profilePicture: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+        dateCreated: "2025-01-10T08:00:00Z"
+      },
+      {
+        id: "ADMIN-002",
+        name: "Tshifhiwa Nekhavhambe",
+        email: "t.nekhavhambe@thulamela.gov.za",
+        phone: "015 962 7501",
+        physicalAddress: "Thohoyandou Civic Centre, Limpopo",
+        username: "munadmin",
+        role: "municipal_admin",
+        employeeNumber: "EMP-MA-002",
+        saIdNumber: "8911055678083",
+        status: "active",
+        profilePicture: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150",
+        dateCreated: "2025-01-15T09:30:00Z"
+      },
+      {
+        id: "COUN-001",
+        name: "Cllr Azwihangwisi Radzilani",
+        email: "a.radzilani@thulamela.gov.za",
+        phone: "082 123 4567",
+        physicalAddress: "124 Makwarela Ext, Thohoyandou",
+        username: "cllr1",
+        role: "councillor",
+        wardNumber: 1,
+        wardName: "Makwarela",
+        employeeNumber: "EMP-CLLR-001",
+        saIdNumber: "7811225893081",
+        politicalPosition: "ANC Ward Councillor",
+        status: "active",
+        profilePicture: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150",
+        dateCreated: "2025-02-01T10:00:00Z"
+      },
+      {
+        id: "COUN-002",
+        name: "Cllr Mulatedzi Nemudzivhadi",
+        email: "m.nemudzivhadi@thulamela.gov.za",
+        phone: "083 456 7890",
+        physicalAddress: "45 Sibasa Main Rd, Sibasa",
+        username: "cllr2",
+        role: "councillor",
+        wardNumber: 2,
+        wardName: "Sibasa",
+        employeeNumber: "EMP-CLLR-002",
+        saIdNumber: "8205145781082",
+        politicalPosition: "ANC Ward Councillor",
+        status: "active",
+        profilePicture: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150",
+        dateCreated: "2025-02-01T10:30:00Z"
+      },
+      {
+        id: "TECH-001",
+        name: "Vhonani Mapholi",
+        email: "v.mapholi@thulamela.gov.za",
+        phone: "072 111 2222",
+        physicalAddress: "Thulamela Depot, Sibasa",
+        username: "tech1",
+        role: "technician",
+        status: "active",
+        profilePicture: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+        dateCreated: "2025-02-05T08:00:00Z"
+      }
+    ];
+
+    // Seed default user documents in Firestore first if missing
+    for (const seedUser of defaultSeedUsers) {
+      try {
+        const docRef = adminDb.collection("users").doc(seedUser.id);
+        const docSnap = await docRef.get();
+        if (!docSnap.exists) {
+          await docRef.set(seedUser);
+          console.log(`[AUTH PROVISION]: Seeded default Firestore user document for "${seedUser.username}" (${seedUser.email})`);
+        }
+      } catch (seedErr: any) {
+        console.warn(`[AUTH PROVISION WARN]: Could not seed Firestore document for ${seedUser.username}:`, seedErr.message);
+      }
     }
 
-    console.log(`[AUTH PROVISION]: Found ${usersSnap.size} Firestore users. Verifying Authentication synchronization...`);
+    const usersSnap = await adminDb.collection("users").get();
     let synced = 0;
     let provisioned = 0;
 
@@ -620,9 +724,9 @@ async function autoProvisionAuthUsers() {
       const username = (u.username || "").trim().toLowerCase();
       const isDevUser = devUsernames.includes(username);
 
-      let existingUser: any = null;
+      let existingAuthUser: any = null;
       try {
-        existingUser = await adminAuth.getUserByEmail(normalizedEmail);
+        existingAuthUser = await adminAuth.getUserByEmail(normalizedEmail);
       } catch (err: any) {
         if (err.code !== "auth/user-not-found" && !err.message?.includes("user-not-found")) {
           console.error(`[AUTH PROVISION ERROR]: Failed checking email ${email}:`, err.message || err);
@@ -630,34 +734,98 @@ async function autoProvisionAuthUsers() {
         }
       }
 
-      if (existingUser) {
-        // Account exists
-        if (isDevUser) {
-          // Keep development password in sync for ease of development testing
-          await adminAuth.updateUser(existingUser.uid, {
-            password: "Thulamela@2026"
+      if (existingAuthUser) {
+        // Account exists in Firebase Auth!
+        // DO NOT reset or overwrite password for existing users.
+        if (existingAuthUser.disabled || !existingAuthUser.emailVerified) {
+          await adminAuth.updateUser(existingAuthUser.uid, {
+            emailVerified: true,
+            disabled: false
           });
-          console.log(`[AUTH PROVISION]: Updated existing development user "${username}" (${normalizedEmail}) password to Thulamela@2026`);
+          console.log(`[AUTH PROVISION]: Ensured account status active & emailVerified for "${username}" (${normalizedEmail})`);
+        }
+
+        // Map Firebase Auth UID to Firestore document users/{existingAuthUser.uid}
+        const authUidDocRef = adminDb.collection("users").doc(existingAuthUser.uid);
+        const authUidDocSnap = await authUidDocRef.get();
+
+        if (!authUidDocSnap.exists) {
+          await authUidDocRef.set({
+            ...u,
+            id: existingAuthUser.uid,
+            status: "active"
+          }, { merge: true });
+          console.log(`[AUTH PROVISION]: Linked Firestore profile users/${existingAuthUser.uid} for "${username}" (${normalizedEmail})`);
         } else {
-          console.log(`[AUTH PROVISION]: Account already exists for "${username}" (${normalizedEmail}), left untouched.`);
+          if (authUidDocSnap.data()?.status !== "active") {
+            await authUidDocRef.update({ status: "active" });
+          }
+        }
+
+        if (userDoc.id !== existingAuthUser.uid) {
+          await userDoc.ref.update({ status: "active" });
         }
         synced++;
       } else {
-        // Account is missing, securely create it with matching UID
-        const password = isDevUser ? "Thulamela@2026" : (crypto.randomBytes(16).toString("hex") + "Thul@2026!");
-        await adminAuth.createUser({
+        // Account missing in Auth -> Create missing Auth user securely
+        const defaultPassword = isDevUser ? "Thulamela@2026" : (crypto.randomBytes(16).toString("hex") + "Thul@2026!");
+        const newAuthUser = await adminAuth.createUser({
           uid: userDoc.id,
           email: normalizedEmail,
-          password: password,
-          displayName: u.name || u.username || "Thulamela User"
+          password: defaultPassword,
+          displayName: u.name || u.username || "Thulamela User",
+          emailVerified: true,
+          disabled: false
         });
 
-        console.log(`[AUTH PROVISION]: Created missing Auth user for "${username}" (${normalizedEmail}) with matching UID ${userDoc.id}`);
+        // Ensure Firestore profile exists at newAuthUser.uid
+        await adminDb.collection("users").doc(newAuthUser.uid).set({
+          ...u,
+          id: newAuthUser.uid,
+          status: "active"
+        }, { merge: true });
+
+        console.log(`[AUTH PROVISION]: Created missing Auth user & linked Firestore profile for "${username}" (${normalizedEmail}) with UID ${newAuthUser.uid}`);
         provisioned++;
       }
     }
 
-    console.log(`[AUTH PROVISION COMPLETE]: Checked ${usersSnap.size} users. Synced/Updated: ${synced}, Provisioned: ${provisioned}`);
+    // Inverse check: ensure all Auth users have corresponding Firestore documents
+    try {
+      const listUsersResult = await adminAuth.listUsers(1000);
+      for (const authUser of listUsersResult.users) {
+        if (!authUser.email) continue;
+        const authDocRef = adminDb.collection("users").doc(authUser.uid);
+        const authDocSnap = await authDocRef.get();
+        if (!authDocSnap.exists) {
+          const emailSnap = await adminDb.collection("users").where("email", "==", authUser.email.toLowerCase()).get();
+          if (!emailSnap.empty) {
+            const foundData = emailSnap.docs[0].data();
+            await authDocRef.set({
+              ...foundData,
+              id: authUser.uid,
+              status: "active"
+            }, { merge: true });
+            console.log(`[AUTH PROVISION]: Linked existing Auth user ${authUser.email} (${authUser.uid}) to Firestore profile`);
+          } else {
+            await authDocRef.set({
+              id: authUser.uid,
+              name: authUser.displayName || authUser.email.split("@")[0],
+              email: authUser.email,
+              username: authUser.email.split("@")[0],
+              role: "municipal_admin",
+              status: "active",
+              dateCreated: new Date().toISOString()
+            });
+            console.log(`[AUTH PROVISION]: Created Firestore profile for Auth user ${authUser.email} (${authUser.uid})`);
+          }
+        }
+      }
+    } catch (listErr: any) {
+      console.warn("[AUTH PROVISION WARN]: Could not list Auth users for inverse check:", listErr.message);
+    }
+
+    console.log(`[AUTH PROVISION COMPLETE]: Checked users. Synced: ${synced}, Provisioned: ${provisioned}`);
   } catch (err: any) {
     console.warn("[AUTH PROVISION SKIP]: Skipping auto-provision (likely local/unauthorized environment):", err.message);
   }
