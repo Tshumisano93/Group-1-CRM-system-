@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { 
   getDocuments, 
   saveDocuments, 
+  saveSingleDocument,
+  deleteSingleDocument,
   addAuditLog 
 } from "../db";
 import { MunicipalDocument, User } from "../types";
@@ -61,14 +63,13 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
   });
 
   // Handle uploading document
-  const handleUploadDoc = (e: React.FormEvent) => {
+  const handleUploadDoc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newUrl.trim()) {
       onAddToast("Validation Alert", "Please specify a document title and the secure resource URL.", "warning");
       return;
     }
 
-    const allDocs = getDocuments();
     const docId = `doc-${Date.now()}`;
 
     const newDocObj: MunicipalDocument = {
@@ -87,51 +88,58 @@ export default function DocumentManager({ currentUser, onAddToast }: DocumentMan
       ]
     };
 
-    allDocs.unshift(newDocObj);
-    saveDocuments(allDocs);
-    setDocuments(allDocs);
+    try {
+      await saveSingleDocument(newDocObj);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Upload Document",
-      `Uploaded document ${newDocObj.title} into category ${newCategory}`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Upload Document",
+        `Uploaded document ${newDocObj.title} into category ${newCategory}`
+      );
 
-    onAddToast("Document Uploaded", `Document file '${newTitle}' successfully committed to version control repository.`, "success");
+      onAddToast("Document Uploaded", `Document file '${newTitle}' successfully committed to version control repository in Firestore.`, "success");
 
-    // Reset Form
-    setNewTitle("");
-    setNewUrl("");
-    setShowUploadForm(false);
+      // Reset Form
+      setNewTitle("");
+      setNewUrl("");
+      setShowUploadForm(false);
+      loadDocs();
+    } catch (err: any) {
+      console.error("Document upload failed:", err);
+      onAddToast("Upload Failed", "Failed to save document to Firestore.", "error");
+    }
   };
 
   // Handle document deletion
-  const handleDeleteDoc = (docId: string, e: React.MouseEvent) => {
+  const handleDeleteDoc = async (docId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin") {
       onAddToast("Admin Privileges Required", "Only municipal administrators can delete secure document assets.", "error");
       return;
     }
 
-    const allDocs = getDocuments();
-    const targetDoc = allDocs.find(d => d.id === docId);
-    const updated = allDocs.filter(d => d.id !== docId);
-    
-    saveDocuments(updated);
-    setDocuments(updated);
+    const targetDoc = documents.find(d => d.id === docId);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Delete Document",
-      `Removed document ${targetDoc?.title || docId}`
-    );
+    try {
+      await deleteSingleDocument(docId);
 
-    onAddToast("Document Deleted", "The repository asset has been deleted successfully.", "info");
-    setSelectedDocId(null);
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Delete Document",
+        `Removed document ${targetDoc?.title || docId}`
+      );
+
+      onAddToast("Document Deleted", "The repository asset has been deleted from Firestore successfully.", "info");
+      setSelectedDocId(null);
+      loadDocs();
+    } catch (err: any) {
+      console.error("Document deletion failed:", err);
+      onAddToast("Delete Failed", "Failed to delete document from Firestore.", "error");
+    }
   };
 
   // Secure download with audit trail

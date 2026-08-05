@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { 
   getDigitalForms, 
   saveDigitalForms, 
+  saveSingleDigitalForm,
+  deleteSingleDigitalForm,
   addAuditLog 
 } from "../db";
 import { DigitalForm, User } from "../types";
@@ -87,7 +89,7 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
   };
 
   // Submit dynamic form
-  const handleSubmitForm = (e: React.FormEvent, isDraftFlag: boolean = false) => {
+  const handleSubmitForm = async (e: React.FormEvent, isDraftFlag: boolean = false) => {
     e.preventDefault();
     
     if (!electronicSignature.trim() && !isDraftFlag) {
@@ -95,7 +97,6 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
       return;
     }
 
-    const allForms = getDigitalForms();
     const formId = `form-${Date.now()}`;
 
     // construct form data based on type
@@ -125,58 +126,65 @@ export default function DigitalForms({ currentUser, onAddToast }: DigitalFormsPr
       isDraft: isDraftFlag
     };
 
-    allForms.unshift(newFormObj);
-    saveDigitalForms(allForms);
-    setForms(allForms);
+    try {
+      await saveSingleDigitalForm(newFormObj);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      isDraftFlag ? "Save Form Draft" : "Submit Compliance Form",
-      `Saved compliance form ${formId} (${isDraftFlag ? "Draft" : "Submitted"}) regarding '${title}'`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        isDraftFlag ? "Save Form Draft" : "Submit Compliance Form",
+        `Saved compliance form ${formId} (${isDraftFlag ? "Draft" : "Submitted"}) regarding '${title}'`
+      );
 
-    onAddToast(
-      isDraftFlag ? "Draft Stored" : "Form Certified & Submitted",
-      isDraftFlag 
-        ? "Form successfully queued inside local draft workspace." 
-        : "Form signed off, locked, and published to compliance registers.",
-      "success"
-    );
+      onAddToast(
+        isDraftFlag ? "Draft Stored" : "Form Certified & Submitted",
+        isDraftFlag 
+          ? "Form successfully queued inside local draft workspace." 
+          : "Form signed off, locked, and published to compliance registers in Firestore.",
+        "success"
+      );
 
-    // Reset Form states
-    setSiteLocation("");
-    setMaterialsUsed("");
-    setLaborHours("");
-    setLeakSeverity("");
-    setTechnicianNotes("");
-    setElectronicSignature("");
-    setCapturedGps("");
+      // Reset Form states
+      setSiteLocation("");
+      setMaterialsUsed("");
+      setLaborHours("");
+      setLeakSeverity("");
+      setTechnicianNotes("");
+      setElectronicSignature("");
+      setCapturedGps("");
+      loadForms();
+    } catch (err: any) {
+      console.error("Form submission failed:", err);
+      onAddToast("Submission Failed", "Failed to save form to Firestore.", "error");
+    }
   };
 
   // Delete Form
-  const handleDeleteForm = (id: string) => {
+  const handleDeleteForm = async (id: string) => {
     if (currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin") {
       onAddToast("Access Denied", "Only administrators can remove audited compliance certificates.", "error");
       return;
     }
 
-    const allForms = getDigitalForms();
-    const updated = allForms.filter(f => f.id !== id);
-    saveDigitalForms(updated);
-    setForms(updated);
+    try {
+      await deleteSingleDigitalForm(id);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Delete Compliance Form",
-      `Removed compliance form reference ${id}`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Delete Compliance Form",
+        `Removed compliance form reference ${id}`
+      );
 
-    onAddToast("Form Removed", "Audit form successfully purged.", "info");
-    setSelectedFormId(null);
+      onAddToast("Form Removed", "Audit form successfully purged from Firestore.", "info");
+      setSelectedFormId(null);
+      loadForms();
+    } catch (err: any) {
+      console.error("Form deletion failed:", err);
+      onAddToast("Delete Failed", "Failed to delete form from Firestore.", "error");
+    }
   };
 
   const filteredForms = forms.filter(f => {

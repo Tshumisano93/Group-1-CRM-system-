@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { 
   getTasks, 
-  saveTasks, 
+  saveTasks,
+  saveSingleTask,
+  deleteSingleTask, 
   getTechnicians, 
   getDepartments,
   addAuditLog 
@@ -74,7 +76,7 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
   });
 
   // Handle task registration
-  const handleCreateTask = (e: React.FormEvent) => {
+  const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitle.trim() || !taskAssignedId || !taskPriority) {
       onAddToast("Information Needed", "Please provide a task title, select assigned staff, and select priority.", "warning");
@@ -104,102 +106,110 @@ export default function TaskManager({ currentUser, onAddToast }: TaskManagerProp
       comments: []
     };
 
-    allTasks.unshift(newTask);
-    saveTasks(allTasks);
-    setTasks(allTasks);
+    try {
+      await saveSingleTask(newTask);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Create Dispatch Task",
-      `Created task ${newId} assigned to ${assignedName} regarding '${taskTitle}'`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Create Dispatch Task",
+        `Created task ${newId} assigned to ${assignedName} regarding '${taskTitle}'`
+      );
 
-    onAddToast("Task Assigned", `Dispatch checklist item ${newId} successfully queued.`, "success");
-    
-    // reset form
-    setTaskTitle("");
-    setTaskDesc("");
-    setTaskAssignedId("");
-    setTaskPriority("");
-    setTaskDueDate("2026-07-15");
-    setShowForm(false);
+      onAddToast("Task Assigned", `Dispatch checklist item ${newId} successfully saved to Firestore.`, "success");
+      
+      // reset form
+      setTaskTitle("");
+      setTaskDesc("");
+      setTaskAssignedId("");
+      setTaskPriority("");
+      setTaskDueDate("2026-07-15");
+      setShowForm(false);
+      loadData();
+    } catch (err: any) {
+      console.error("Task creation failed:", err);
+      onAddToast("Save Failed", "Failed to persist task to Firestore.", "error");
+    }
   };
 
   // Delete task
-  const handleDeleteTask = (taskId: string) => {
+  const handleDeleteTask = async (taskId: string) => {
     if (currentUser.role !== "super_admin" && currentUser.role !== "municipal_admin") {
       onAddToast("Admin Needed", "Only managers or admins can archive dispatch tasks.", "error");
       return;
     }
 
-    const allTasks = getTasks();
-    const updated = allTasks.filter(t => t.id !== taskId);
-    saveTasks(updated);
-    setTasks(updated);
+    try {
+      await deleteSingleTask(taskId);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Delete Dispatch Task",
-      `Removed task checklist reference ${taskId}`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Delete Dispatch Task",
+        `Removed task checklist reference ${taskId}`
+      );
 
-    onAddToast("Task Removed", `Dispatch task ${taskId} was cleared from active worklists.`, "info");
-    setSelectedTaskId(null);
+      onAddToast("Task Removed", `Dispatch task ${taskId} was cleared from Firestore.`, "info");
+      setSelectedTaskId(null);
+      loadData();
+    } catch (err: any) {
+      console.error("Task deletion failed:", err);
+      onAddToast("Delete Failed", "Failed to remove task from Firestore.", "error");
+    }
   };
 
   // Update Progress / Status
-  const handleUpdateTaskStatus = (taskId: string, newStatus: Task["status"], percent: number) => {
-    const allTasks = getTasks();
-    const updated = allTasks.map(t => {
-      if (t.id === taskId) {
-        return {
-          ...t,
-          status: newStatus,
-          progressPercentage: percent,
-          completionDate: newStatus === "Completed" ? new Date().toISOString() : undefined
-        };
-      }
-      return t;
-    });
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: Task["status"], percent: number) => {
+    const targetTask = tasks.find(t => t.id === taskId);
+    if (!targetTask) return;
 
-    saveTasks(updated);
-    setTasks(updated);
+    const updatedTask: Task = {
+      ...targetTask,
+      status: newStatus,
+      progressPercentage: percent,
+      completionDate: newStatus === "Completed" ? new Date().toISOString() : undefined
+    };
 
-    onAddToast("Task Updated", `Task progress has been adjusted to ${percent}%.`, "success");
-    loadData();
+    try {
+      await saveSingleTask(updatedTask);
+      onAddToast("Task Updated", `Task progress has been adjusted to ${percent}%.`, "success");
+      loadData();
+    } catch (err: any) {
+      console.error("Task update failed:", err);
+      onAddToast("Update Failed", "Failed to update task progress in Firestore.", "error");
+    }
   };
 
   // Submit commentary
-  const handleAddTaskComment = (taskId: string) => {
+  const handleAddTaskComment = async (taskId: string) => {
     if (!newCommentText.trim()) return;
 
-    const allTasks = getTasks();
-    const updated = allTasks.map(t => {
-      if (t.id === taskId) {
-        const comments = t.comments || [];
-        const newCom = {
-          id: `tcom-${Date.now()}`,
-          userName: currentUser.name,
-          text: newCommentText.trim(),
-          timestamp: new Date().toISOString()
-        };
-        return {
-          ...t,
-          comments: [...comments, newCom]
-        };
-      }
-      return t;
-    });
+    const targetTask = tasks.find(t => t.id === taskId);
+    if (!targetTask) return;
 
-    saveTasks(updated);
-    setTasks(updated);
-    setNewCommentText("");
-    onAddToast("Feedback Appended", "Technical diagnostic comments saved to task history.", "success");
-    loadData();
+    const comments = targetTask.comments || [];
+    const newCom = {
+      id: `tcom-${Date.now()}`,
+      userName: currentUser.name,
+      text: newCommentText.trim(),
+      timestamp: new Date().toISOString()
+    };
+    const updatedTask: Task = {
+      ...targetTask,
+      comments: [...comments, newCom]
+    };
+
+    try {
+      await saveSingleTask(updatedTask);
+      setNewCommentText("");
+      onAddToast("Feedback Appended", "Technical diagnostic comments saved to task history.", "success");
+      loadData();
+    } catch (err: any) {
+      console.error("Adding task comment failed:", err);
+      onAddToast("Comment Error", "Failed to append comment in Firestore.", "error");
+    }
   };
 
   const getPriorityBadge = (p: Task["priority"]) => {

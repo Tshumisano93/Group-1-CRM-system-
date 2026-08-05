@@ -82,6 +82,22 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 }
 
+export function sanitizeFirestorePayload<T extends Record<string, any>>(obj: T): T {
+  if (!obj || typeof obj !== "object") return obj;
+  const clean: Record<string, any> = {};
+  Object.keys(obj).forEach(key => {
+    const val = obj[key];
+    if (val !== undefined) {
+      if (val !== null && typeof val === "object" && !Array.isArray(val) && !(val instanceof Date)) {
+        clean[key] = sanitizeFirestorePayload(val);
+      } else {
+        clean[key] = val;
+      }
+    }
+  });
+  return clean as T;
+}
+
 let syncStatus: "synced" | "syncing" | "offline" = "offline";
 
 export function getSyncStatus() {
@@ -770,7 +786,7 @@ export function saveComplaints(complaints: Complaint[]) {
   if (isFirebaseEnabled && db) {
     complaints.forEach(async (c) => {
       try {
-        await setDoc(doc(db, "complaints", c.id), c);
+        await setDoc(doc(db, "complaints", c.id), sanitizeFirestorePayload(c));
       } catch (err) {
         console.warn("Firestore sync complaints skipped/failed (expected if unauthorized or offline):", err);
       }
@@ -778,10 +794,45 @@ export function saveComplaints(complaints: Complaint[]) {
   }
 }
 
+export async function saveSingleComplaint(complaint: Complaint): Promise<void> {
+  const cleanComplaint = sanitizeFirestorePayload(complaint);
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "complaints", cleanComplaint.id), cleanComplaint);
+    } catch (err: any) {
+      console.error("Firestore error saving complaint:", err);
+      handleFirestoreError(err, OperationType.WRITE, `complaints/${cleanComplaint.id}`);
+      throw err;
+    }
+  }
+  const current = getComplaints();
+  const idx = current.findIndex(c => c.id === cleanComplaint.id);
+  let updated: Complaint[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = cleanComplaint;
+  } else {
+    updated = [cleanComplaint, ...current];
+  }
+  localStorage.setItem("thulamela_crm_complaints", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+}
+
 export async function deleteComplaint(complaint: Complaint): Promise<void> {
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "complaints", complaint.id));
+    } catch (err: any) {
+      console.error("Firestore error deleting complaint:", err);
+      handleFirestoreError(err, OperationType.DELETE, `complaints/${complaint.id}`);
+      throw err;
+    }
+  }
+
   const complaints = getComplaints();
   const filtered = complaints.filter(c => c.id !== complaint.id);
-  saveComplaints(filtered);
+  localStorage.setItem("thulamela_crm_complaints", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
 
   if (complaint.supportingImages && Array.isArray(complaint.supportingImages)) {
     for (const url of complaint.supportingImages) {
@@ -794,15 +845,6 @@ export async function deleteComplaint(complaint: Complaint): Promise<void> {
           console.warn("Failed to delete storage file for complaint image:", url, err);
         }
       }
-    }
-  }
-
-  if (isFirebaseEnabled && db) {
-    try {
-      await deleteDoc(doc(db, "complaints", complaint.id));
-    } catch (err: any) {
-      console.error("Firestore error deleting complaint:", err);
-      handleFirestoreError(err, OperationType.DELETE, `complaints/${complaint.id}`);
     }
   }
 
@@ -1082,42 +1124,43 @@ export function saveCalendarEvents(events: CalendarEvent[]) {
 }
 
 export async function saveSingleCalendarEvent(event: CalendarEvent): Promise<void> {
+  const cleanEvent = sanitizeFirestorePayload(event);
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "calendarEvents", cleanEvent.id), cleanEvent);
+    } catch (err: any) {
+      console.error("Firestore error saving calendar event:", err);
+      handleFirestoreError(err, OperationType.WRITE, `calendarEvents/${cleanEvent.id}`);
+      throw err;
+    }
+  }
   const current = getCalendarEvents();
-  const idx = current.findIndex(e => e.id === event.id);
+  const idx = current.findIndex(e => e.id === cleanEvent.id);
   let updated: CalendarEvent[];
   if (idx >= 0) {
     updated = [...current];
-    updated[idx] = event;
+    updated[idx] = cleanEvent;
   } else {
-    updated = [event, ...current];
+    updated = [cleanEvent, ...current];
   }
   localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(updated));
   triggerDbUpdateEvent();
-
-  if (isFirebaseEnabled && db) {
-    try {
-      await setDoc(doc(db, "calendarEvents", event.id), event);
-    } catch (err: any) {
-      console.error("Firestore error saving calendar event:", err);
-      handleFirestoreError(err, OperationType.WRITE, `calendarEvents/${event.id}`);
-    }
-  }
 }
 
 export async function deleteCalendarEvent(id: string): Promise<void> {
-  const current = getCalendarEvents();
-  const filtered = current.filter(e => e.id !== id);
-  localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(filtered));
-  triggerDbUpdateEvent();
-
   if (isFirebaseEnabled && db) {
     try {
       await deleteDoc(doc(db, "calendarEvents", id));
     } catch (err: any) {
       console.error("Firestore error deleting calendar event:", err);
       handleFirestoreError(err, OperationType.DELETE, `calendarEvents/${id}`);
+      throw err;
     }
   }
+  const current = getCalendarEvents();
+  const filtered = current.filter(e => e.id !== id);
+  localStorage.setItem("thulamela_crm_calendar_events", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
 }
 
 // Get and save Tasks
@@ -1131,12 +1174,52 @@ export function saveTasks(tasks: Task[]) {
   if (isFirebaseEnabled && db) {
     tasks.forEach(async (t) => {
       try {
-        await setDoc(doc(db, "tasks", t.id), t);
+        await setDoc(doc(db, "tasks", t.id), sanitizeFirestorePayload(t));
       } catch (err) {
         console.warn("Firestore sync tasks skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
+}
+
+export async function saveSingleTask(task: Task): Promise<void> {
+  const cleanTask = sanitizeFirestorePayload(task);
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "tasks", cleanTask.id), cleanTask);
+    } catch (err: any) {
+      console.error("Firestore error saving task:", err);
+      handleFirestoreError(err, OperationType.WRITE, `tasks/${cleanTask.id}`);
+      throw err;
+    }
+  }
+  const current = getTasks();
+  const idx = current.findIndex(t => t.id === cleanTask.id);
+  let updated: Task[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = cleanTask;
+  } else {
+    updated = [cleanTask, ...current];
+  }
+  localStorage.setItem("thulamela_crm_tasks", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+}
+
+export async function deleteSingleTask(id: string): Promise<void> {
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "tasks", id));
+    } catch (err: any) {
+      console.error("Firestore error deleting task:", err);
+      handleFirestoreError(err, OperationType.DELETE, `tasks/${id}`);
+      throw err;
+    }
+  }
+  const current = getTasks();
+  const filtered = current.filter(t => t.id !== id);
+  localStorage.setItem("thulamela_crm_tasks", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
 }
 
 // Get and save Documents
@@ -1150,12 +1233,52 @@ export function saveDocuments(documents: MunicipalDocument[]) {
   if (isFirebaseEnabled && db) {
     documents.forEach(async (d) => {
       try {
-        await setDoc(doc(db, "documents", d.id), d);
+        await setDoc(doc(db, "documents", d.id), sanitizeFirestorePayload(d));
       } catch (err) {
         console.warn("Firestore sync documents skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
+}
+
+export async function saveSingleDocument(document: MunicipalDocument): Promise<void> {
+  const cleanDoc = sanitizeFirestorePayload(document);
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "documents", cleanDoc.id), cleanDoc);
+    } catch (err: any) {
+      console.error("Firestore error saving document:", err);
+      handleFirestoreError(err, OperationType.WRITE, `documents/${cleanDoc.id}`);
+      throw err;
+    }
+  }
+  const current = getDocuments();
+  const idx = current.findIndex(d => d.id === cleanDoc.id);
+  let updated: MunicipalDocument[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = cleanDoc;
+  } else {
+    updated = [cleanDoc, ...current];
+  }
+  localStorage.setItem("thulamela_crm_documents", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+}
+
+export async function deleteSingleDocument(id: string): Promise<void> {
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "documents", id));
+    } catch (err: any) {
+      console.error("Firestore error deleting document:", err);
+      handleFirestoreError(err, OperationType.DELETE, `documents/${id}`);
+      throw err;
+    }
+  }
+  const current = getDocuments();
+  const filtered = current.filter(d => d.id !== id);
+  localStorage.setItem("thulamela_crm_documents", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
 }
 
 // Get and save Digital Forms
@@ -1169,12 +1292,52 @@ export function saveDigitalForms(forms: DigitalForm[]) {
   if (isFirebaseEnabled && db) {
     forms.forEach(async (f) => {
       try {
-        await setDoc(doc(db, "digitalForms", f.id), f);
+        await setDoc(doc(db, "digitalForms", f.id), sanitizeFirestorePayload(f));
       } catch (err) {
         console.warn("Firestore sync digitalForms skipped/failed (expected if unauthorized or offline):", err);
       }
     });
   }
+}
+
+export async function saveSingleDigitalForm(form: DigitalForm): Promise<void> {
+  const cleanForm = sanitizeFirestorePayload(form);
+  if (isFirebaseEnabled && db) {
+    try {
+      await setDoc(doc(db, "digitalForms", cleanForm.id), cleanForm);
+    } catch (err: any) {
+      console.error("Firestore error saving digital form:", err);
+      handleFirestoreError(err, OperationType.WRITE, `digitalForms/${cleanForm.id}`);
+      throw err;
+    }
+  }
+  const current = getDigitalForms();
+  const idx = current.findIndex(f => f.id === cleanForm.id);
+  let updated: DigitalForm[];
+  if (idx >= 0) {
+    updated = [...current];
+    updated[idx] = cleanForm;
+  } else {
+    updated = [cleanForm, ...current];
+  }
+  localStorage.setItem("thulamela_crm_digital_forms", JSON.stringify(updated));
+  triggerDbUpdateEvent();
+}
+
+export async function deleteSingleDigitalForm(id: string): Promise<void> {
+  if (isFirebaseEnabled && db) {
+    try {
+      await deleteDoc(doc(db, "digitalForms", id));
+    } catch (err: any) {
+      console.error("Firestore error deleting digital form:", err);
+      handleFirestoreError(err, OperationType.DELETE, `digitalForms/${id}`);
+      throw err;
+    }
+  }
+  const current = getDigitalForms();
+  const filtered = current.filter(f => f.id !== id);
+  localStorage.setItem("thulamela_crm_digital_forms", JSON.stringify(filtered));
+  triggerDbUpdateEvent();
 }
 
 export function getServiceNotices(): ServiceNotice[] {

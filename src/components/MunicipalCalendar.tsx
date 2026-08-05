@@ -246,6 +246,8 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
     setShowCreateModal(true);
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   // Form Submission
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -295,41 +297,58 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
       dateCreated: editingEvent ? editingEvent.dateCreated : new Date().toISOString(),
     };
 
-    await saveSingleCalendarEvent(eventPayload);
+    setIsSaving(true);
+    try {
+      await saveSingleCalendarEvent(eventPayload);
 
-    // Audit Logging
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      editingEvent ? "Update Calendar Event" : "Create Calendar Event",
-      `${editingEvent ? "Updated" : "Created"} schedule '${formTitle}' for ${deptObj ? deptObj.name : "Department"}`
-    );
+      // Audit Logging
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        editingEvent ? "Update Calendar Event" : "Create Calendar Event",
+        `${editingEvent ? "Updated" : "Created"} schedule '${formTitle}' for ${deptObj ? deptObj.name : "Department"}`
+      );
 
-    // Notification Trigger (Notify Technician/Staff if assigned)
-    if (formAssignedUser && formAssignedUser !== currentUser.id) {
-      const notif: Notification = {
-        id: `notif-${Date.now()}`,
-        userId: formAssignedUser,
-        role: "technician",
-        title: `Schedule Assignment: ${formTitle}`,
-        message: `You have been assigned to '${formTitle}' on ${new Date(formStartDate).toLocaleDateString("en-ZA")} at ${formLocation}.`,
-        type: "info",
-        isRead: false,
-        timestamp: new Date().toISOString(),
-        complaintId: formComplaintId || undefined,
-      };
-      await saveSingleNotification(notif);
+      // Notification Trigger (Notify Technician/Staff if assigned)
+      if (formAssignedUser && formAssignedUser !== currentUser.id) {
+        const notif: Notification = {
+          id: `notif-${Date.now()}`,
+          userId: formAssignedUser,
+          role: "technician",
+          title: `Schedule Assignment: ${formTitle}`,
+          message: `You have been assigned to '${formTitle}' on ${new Date(formStartDate).toLocaleDateString("en-ZA")} at ${formLocation}.`,
+          type: "info",
+          isRead: false,
+          timestamp: new Date().toISOString(),
+          complaintId: formComplaintId || undefined,
+        };
+        await saveSingleNotification(notif).catch(e => console.warn("Failed sending assignment notification:", e));
+      }
+
+      onAddToast(
+        editingEvent ? "Schedule Updated" : "Schedule Created",
+        `The operational schedule item '${formTitle}' has been successfully saved to Firestore.`,
+        "success"
+      );
+
+      setShowCreateModal(false);
+      setEditingEvent(null);
+    } catch (err: any) {
+      console.error("Error saving calendar schedule:", err);
+      let msg = "Failed to save schedule item to Firestore.";
+      if (err?.message) {
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed.error) msg = `Firestore Error: ${parsed.error}`;
+        } catch (_) {
+          msg = err.message;
+        }
+      }
+      onAddToast("Persistence Error", msg, "error");
+    } finally {
+      setIsSaving(false);
     }
-
-    onAddToast(
-      editingEvent ? "Schedule Updated" : "Schedule Created",
-      `The operational schedule item '${formTitle}' has been successfully saved.`,
-      "success"
-    );
-
-    setShowCreateModal(false);
-    setEditingEvent(null);
   };
 
   // Status Quick Update Handler
@@ -338,19 +357,24 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
       ...evt,
       status: newStatus
     };
-    await saveSingleCalendarEvent(updatedEvt);
+    try {
+      await saveSingleCalendarEvent(updatedEvt);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Update Event Status",
-      `Changed status of '${evt.title}' to ${newStatus}`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Update Event Status",
+        `Changed status of '${evt.title}' to ${newStatus}`
+      );
 
-    onAddToast("Status Updated", `Schedule status set to ${newStatus}.`, "info");
-    if (selectedEvent?.id === evt.id) {
-      setSelectedEvent(updatedEvt);
+      onAddToast("Status Updated", `Schedule status set to ${newStatus}.`, "info");
+      if (selectedEvent?.id === evt.id) {
+        setSelectedEvent(updatedEvt);
+      }
+    } catch (err: any) {
+      console.error("Error updating schedule status:", err);
+      onAddToast("Update Failed", "Failed to update schedule status in Firestore.", "error");
     }
   };
 
@@ -372,18 +396,23 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
       return;
     }
 
-    await deleteCalendarEvent(id);
+    try {
+      await deleteCalendarEvent(id);
 
-    addAuditLog(
-      currentUser.id,
-      currentUser.name,
-      currentUser.role,
-      "Delete Event",
-      `Deleted calendar event #${id}`
-    );
+      addAuditLog(
+        currentUser.id,
+        currentUser.name,
+        currentUser.role,
+        "Delete Event",
+        `Deleted calendar event #${id}`
+      );
 
-    onAddToast("Event Removed", "The schedule item has been removed.", "info");
-    setSelectedEvent(null);
+      onAddToast("Event Removed", "The schedule item has been removed from Firestore.", "info");
+      setSelectedEvent(null);
+    } catch (err: any) {
+      console.error("Error deleting schedule:", err);
+      onAddToast("Delete Failed", "Failed to delete schedule item from Firestore.", "error");
+    }
   };
 
   // Badge Styling Helpers
@@ -1379,10 +1408,11 @@ export default function MunicipalCalendar({ currentUser, onAddToast }: Municipal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold shadow text-xs flex items-center space-x-1"
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold shadow text-xs flex items-center space-x-1 disabled:opacity-50"
                 >
                   <Check size={14} />
-                  <span>{editingEvent ? "Update Schedule" : "Save Schedule"}</span>
+                  <span>{isSaving ? "Saving to Firestore..." : (editingEvent ? "Update Schedule" : "Save Schedule")}</span>
                 </button>
               </div>
             </form>

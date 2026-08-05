@@ -67,4 +67,30 @@ try {
   console.error("Failed to initialize Firebase:", error);
 }
 
+export async function getAuthIdToken(): Promise<string | null> {
+  if (!isFirebaseEnabled || !auth) return null;
+  if (auth.currentUser) {
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch (e) {
+      console.warn("Failed to get ID token from currentUser:", e);
+    }
+  }
+  await new Promise<void>((resolve) => {
+    const unsub = auth.onAuthStateChanged(() => {
+      unsub();
+      resolve();
+    });
+    setTimeout(resolve, 1500);
+  });
+  if (auth.currentUser) {
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch (e) {
+      console.warn("Failed to get ID token after auth state resolve:", e);
+    }
+  }
+  return null;
+}
+
 export { app, auth, db, storage, firebaseConfig, isFirebaseEnabled };
